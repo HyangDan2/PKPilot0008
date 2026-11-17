@@ -40,4 +40,4 @@ app.js              parsing, rendering, TOC, share links, export, input handling
 js/vendor/          markdown-it 14.3.3, highlight.js 11.11.1, DOMPurify 3.2.6, lz-string 1.5.0
 ```
 
-Theme is the shared one: `/assets/hd2-theme.css` + `/assets/hd2-theme.js` (44px floating toggle).
+Theme is the shared one: `./assets/hd2-theme.css` + `./assets/hd2-theme.js` (44px floating toggle).
