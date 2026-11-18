@@ -342,8 +342,20 @@
             const raw = image.getAttribute('src');
             if (!raw) return;
             const next = previewImageSrc(raw);
-            if (next && next !== raw) image.setAttribute('src', next);
+            if (next && next !== raw) {
+                image.setAttribute('data-origin-src', raw);
+                image.setAttribute('src', next);
+            }
         });
+    }
+
+    /* the HTML file keeps a path that still works where it lands: local names as typed, remote ones absolute */
+    function htmlExportSrc(raw) {
+        const value = String(raw || '');
+        if (!value) return '';
+        if (/^(?:data:|https?:)/i.test(value)) return value;
+        if (findLocalImage(value)) return value;
+        return absoluteImageUrl(value) || value;
     }
 
     /* ---------------------------------------------------------------- render */
@@ -1051,6 +1063,12 @@
     function exportHtml() {
         const clone = el.article.cloneNode(true);
         clone.querySelectorAll('.md-code-head').forEach((node) => node.remove());
+        clone.querySelectorAll('img').forEach((image) => {
+            const raw = image.getAttribute('data-origin-src');
+            if (!raw) return;
+            image.setAttribute('src', htmlExportSrc(raw));
+            image.removeAttribute('data-origin-src');
+        });
         const title = el.docTitle.textContent || 'HD2Lab Document';
         const html = standalone(title, clone.innerHTML);
         download(`${slug(title) || 'document'}.html`, html, 'text/html;charset=utf-8');
