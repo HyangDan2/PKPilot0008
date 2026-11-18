@@ -78,6 +78,9 @@
         tocNav: $('tocNav'),
         btnToc: $('btnToc'),
         btnTocClose: $('btnTocClose'),
+        btnTop: $('btnTop'),
+        btnHelp: $('btnHelp'),
+        helpDialog: $('helpDialog'),
         fileInput: $('fileInput'),
         urlInput: $('urlInput'),
         dropHint: $('dropHint'),
@@ -93,8 +96,14 @@
         sourceUrl: '',
         markdown: '',
         observer: null,
+        headings: [],
         localImages: new Map(),
     };
+
+    /* the document pane is its own scroll container — every scroll/spy routine
+       below measures against it instead of the window */
+    const scroller = () => el.doc;
+    const reduceMotion = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
     /* ---------------------------------------------------------------- markdown */
     const md = window.markdownit({
@@ -426,6 +435,7 @@
         paintStats(parsed.body);
         highlightActive();
         refreshImageSources();
+        resetPaneScroll();
 
         /* a new document replaces whatever the share link pointed to */
         if (location.hash.indexOf('#md=') === 0 && source !== '공유 링크') {
@@ -476,8 +486,59 @@
     }
 
     /* ---------------------------------------------------------------- toc */
+    function setActiveToc(id) {
+        document.querySelectorAll('.toc-link').forEach((link) => {
+            link.classList.toggle('is-active', link.dataset.target === id);
+        });
+    }
+
+    function closeTocDrawer() {
+        el.tocPanel.classList.remove('is-open');
+        if (el.btnToc) el.btnToc.setAttribute('aria-expanded', 'false');
+    }
+
+    /* keep the active entry visible inside the TOC pane without moving the page */
+    function revealTocLink(link) {
+        const nav = el.tocNav;
+        if (!nav || !link || !nav.scrollHeight) return;
+        const navBox = nav.getBoundingClientRect();
+        const linkBox = link.getBoundingClientRect();
+        if (linkBox.top < navBox.top + 8) nav.scrollTop -= navBox.top + 8 - linkBox.top;
+        else if (linkBox.bottom > navBox.bottom - 8) nav.scrollTop += linkBox.bottom - (navBox.bottom - 8);
+    }
+
+    /* scroll the document pane itself to a heading (the window never scrolls) */
+    function scrollToHeading(id, smooth) {
+        const target = id && document.getElementById(id);
+        const pane = scroller();
+        if (!target || !pane || !pane.contains(target)) return;
+        const offset = 14;
+        const top = target.getBoundingClientRect().top - pane.getBoundingClientRect().top + pane.scrollTop - offset;
+        const behavior = smooth === false || reduceMotion() ? 'auto' : 'smooth';
+        if (typeof pane.scrollTo === 'function') pane.scrollTo({ top: Math.max(0, top), behavior });
+        else pane.scrollTop = Math.max(0, top);
+        setActiveToc(id);
+    }
+
+    function hintActiveFromHeadings() {
+        const headings = state.headings || [];
+        const pane = scroller();
+        if (!headings.length || !pane) return;
+        const line = pane.getBoundingClientRect().top + 28;
+        let current = headings[0];
+        for (let i = 0; i < headings.length; i += 1) {
+            if (headings[i].getBoundingClientRect().top <= line) current = headings[i];
+            else break;
+        }
+        if (pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 2) current = headings[headings.length - 1];
+        if (!current || !current.id) return;
+        setActiveToc(current.id);
+        revealTocLink(document.querySelector(`.toc-link[data-target="${current.id}"]`));
+    }
+
     function buildToc() {
-        if (state.observer) state.observer.disconnect();
+        if (state.observer) { state.observer.disconnect(); state.observer = null; }
+        state.headings = [];
         const headings = Array.from(el.article.querySelectorAll('h1, h2, h3, h4'));
         if (!headings.length) {
             el.tocNav.innerHTML = '<p class="toc-empty">제목이 없어 목차가 비어 있습니다.</p>';
@@ -512,24 +573,28 @@
             link.dataset.level = String(item.level);
             link.dataset.target = item.id;
             link.textContent = item.text;
-            link.addEventListener('click', () => {
-                if (window.matchMedia('(max-width: 1000px)').matches) el.tocPanel.classList.remove('is-open');
+            /* the pane scrolls, not the window: jump by hand so the URL (#md= share
+               links) is left alone and the mobile drawer closes first */
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                if (window.matchMedia('(max-width: 1000px)').matches) closeTocDrawer();
+                scrollToHeading(item.id);
             });
             li.appendChild(link);
             stack[stack.length - 1].list.appendChild(li);
         });
         el.tocNav.innerHTML = '';
         el.tocNav.appendChild(list);
+        el.tocNav.scrollTop = 0;
+        state.headings = headings;
 
         if ('IntersectionObserver' in window) {
-            state.observer = new IntersectionObserver((entries) => {
-                entries.forEach((entry) => {
-                    if (!entry.isIntersecting) return;
-                    document.querySelectorAll('.toc-link').forEach((link) => {
-                        link.classList.toggle('is-active', link.dataset.target === entry.target.id);
-                    });
-                });
-            }, { rootMargin: '-96px 0px -70% 0px', threshold: 0 });
+            const root = scroller();
+            state.observer = new IntersectionObserver(() => hintActiveFromHeadings(), {
+                root: root || null,
+                rootMargin: '0px 0px -60% 0px',
+                threshold: 0,
+            });
             headings.forEach((heading) => state.observer.observe(heading));
         }
     }
@@ -537,6 +602,29 @@
     function highlightActive() {
         const first = document.querySelector('.toc-link');
         if (first) first.classList.add('is-active');
+    }
+
+    /* ---------------------------------------------------------------- pane scroll */
+    function syncTopButton() {
+        if (!el.btnTop) return;
+        const on = scroller().scrollTop > 320;
+        el.btnTop.classList.toggle('is-on', on);
+        el.btnTop.hidden = !on;
+    }
+
+    function scrollPaneToTop() {
+        const pane = scroller();
+        const behavior = reduceMotion() ? 'auto' : 'smooth';
+        if (typeof pane.scrollTo === 'function') pane.scrollTo({ top: 0, behavior });
+        else pane.scrollTop = 0;
+        setActiveToc(document.querySelector('.toc-link') ? document.querySelector('.toc-link').dataset.target : '');
+    }
+
+    function resetPaneScroll() {
+        const pane = scroller();
+        if (pane) pane.scrollTop = 0;
+        if (el.tocNav) el.tocNav.scrollTop = 0;
+        syncTopButton();
     }
 
     /* ---------------------------------------------------------------- inputs */
@@ -1136,11 +1224,14 @@ ${bodyHtml}
         el.fileName.textContent = '문서 없음';
         el.docSource.textContent = '';
         el.tocNav.innerHTML = '<p class="toc-empty">제목이 있는 문서를 열면 목차가 만들어집니다.</p>';
+        if (state.observer) { state.observer.disconnect(); state.observer = null; }
+        state.headings = [];
         el.statWords.textContent = '0';
         el.statChars.textContent = '0';
         el.statRead.textContent = '0';
         document.title = 'HD2Lab | Markdown Viewer';
         try { history.replaceState(null, '', location.pathname); } catch (error) { /* ignore */ }
+        resetPaneScroll();
         toast('문서를 닫았습니다.');
     }
 
@@ -1181,12 +1272,28 @@ ${bodyHtml}
         $('btnExport').addEventListener('click', exportHtml);
         $('btnExportZip').addEventListener('click', exportZip);
         $('btnClear').addEventListener('click', clearDocument);
+        el.btnHelp.addEventListener('click', () => {
+            if (typeof el.helpDialog.showModal === 'function') el.helpDialog.showModal();
+            else el.helpDialog.setAttribute('open', '');
+        });
+        el.btnTop.addEventListener('click', scrollPaneToTop);
+        el.doc.addEventListener('scroll', () => {
+            if (el.doc._raf) return;
+            el.doc._raf = window.requestAnimationFrame(() => {
+                el.doc._raf = 0;
+                syncTopButton();
+                hintActiveFromHeadings();
+            });
+        }, { passive: true });
         el.btnToc.addEventListener('click', () => {
             const open = el.tocPanel.classList.toggle('is-open');
             el.btnToc.setAttribute('aria-expanded', open ? 'true' : 'false');
-            if (open) el.tocPanel.scrollIntoView({ block: 'start', behavior: 'smooth' });
+            if (open) el.tocNav.scrollTop = 0;
         });
-        el.btnTocClose.addEventListener('click', () => el.tocPanel.classList.remove('is-open'));
+        el.btnTocClose.addEventListener('click', closeTocDrawer);
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && el.tocPanel.classList.contains('is-open')) closeTocDrawer();
+        });
 
         /* drag & drop anywhere */
         let depth = 0;
@@ -1257,6 +1364,8 @@ ${bodyHtml}
         findLocalImage,
         previewImageSrc,
         documentSlug,
+        scrollToHeading,
+        resetPaneScroll,
         state,
     };
 })();

@@ -2,7 +2,7 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="HD2Lab Markdown Viewer — .md 파일을 열거나 붙여넣으면 GFM 그대로 읽힙니다. 목차, 코드 복사, 인쇄/PDF, ZIP 내보내기까지 브라우저 안에서.">
     <meta name="theme-color" content="#FAFAFD">
     <title>HD2Lab | Markdown Viewer</title>
@@ -17,7 +17,7 @@
     <script>try{var h=localStorage.getItem('hd2-theme');document.documentElement.setAttribute('data-theme',h==='dark'?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
     <link rel="stylesheet" href="./assets/hd2-theme.css?v=20261117-navy">
     <script src="./assets/hd2-theme.js?v=20261117-navy" defer></script>
-    <link rel="stylesheet" href="style.css?v=20261118-zip">
+    <link rel="stylesheet" href="style.css?v=20261118-app">
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg?v=20261116-softiris">
     <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32.png?v=20261116-softiris">
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png?v=20261116-softiris">
@@ -27,10 +27,11 @@
     <script src="js/vendor/purify.min.js" defer></script>
     <script src="js/vendor/lz-string.min.js" defer></script>
     <script src="js/vendor/jszip.min.js" defer></script>
-    <script src="app.js?v=20261118-zip" defer></script>
+    <script src="app.js?v=20261118-app" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#doc">본문으로 건너뛰기</a>
+
     <header class="site-header">
         <div class="header-inner">
             <a class="brand" href="/" aria-label="HD2Lab Web-HQ home">
@@ -39,26 +40,18 @@
                 <em>Markdown Viewer</em>
             </a>
             <div class="header-actions">
+                <button type="button" class="header-icon" id="btnHelp" aria-haspopup="dialog" aria-label="사용 안내 열기" title="사용 안내">
+                    <span aria-hidden="true">?</span>
+                </button>
                 <a class="header-link" href="/">Web-HQ <span aria-hidden="true">↗</span></a>
             </div>
         </div>
     </header>
 
-    <main>
-        <section class="page-head shell">
-            <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>PKPilot 0008 · Markdown</p>
-            <h1>Read it as<br><span>written.</span></h1>
-            <p class="page-lede">.md 파일을 열거나 붙여넣으면 GFM 그대로 읽힙니다. 목차로 넘나들고, 코드는 한 번에 복사하고, 링크 하나로 통째로 공유할 수 있습니다.</p>
-            <ul class="head-chips" aria-label="Viewer features">
-                <li>파일 열기 · 드래그&amp;드롭</li>
-                <li>GFM · 문법 하이라이팅</li>
-                <li>목차 · 코드 복사</li>
-                <li>인쇄/PDF · 공유 링크</li>
-                <li>ZIP · posts/assets</li>
-            </ul>
-        </section>
+    <main class="app">
+        <h1 class="visually-hidden">HD2Lab Markdown Viewer — 마크다운 한 파일을 화면 가득 읽는 뷰어</h1>
 
-        <section class="viewer shell" aria-label="Markdown viewer">
+        <section class="viewer" aria-label="Markdown viewer">
             <div class="io-bar">
                 <div class="io-group">
                     <button type="button" class="button button-primary" id="btnOpenFile" title="문서와 이미지를 함께 열 수 있습니다">파일 열기</button>
@@ -91,7 +84,10 @@
                     <span><strong id="statChars">0</strong> 자</span>
                     <span><strong id="statRead">0</strong>분 읽기</span>
                 </div>
-                <button type="button" class="button button-ghost toc-toggle" id="btnToc">목차</button>
+                <div class="doc-actions">
+                    <button type="button" class="button button-ghost to-top" id="btnTop" aria-label="맨 위로" hidden><span class="to-top-label">맨 위로</span> <span aria-hidden="true">↑</span></button>
+                    <button type="button" class="button button-ghost toc-toggle" id="btnToc" aria-expanded="false" aria-controls="tocPanel">목차</button>
+                </div>
             </div>
 
             <div class="doc-layout">
@@ -105,24 +101,26 @@
                     </nav>
                 </aside>
 
-                <article class="doc" id="doc">
-                    <header class="doc-head" id="docHead">
-                        <p class="doc-eyebrow" id="docEyebrow">MARKDOWN</p>
-                        <h2 class="doc-title" id="docTitle">샘플 문서</h2>
-                        <p class="doc-summary" id="docSummary" hidden></p>
-                        <div class="doc-tags" id="docTags"></div>
-                    </header>
-                    <details class="frontmatter-card" id="fmCard" hidden>
-                        <summary>
-                            <span class="mono-note">FRONTMATTER</span>
-                            <span class="fm-hint" id="fmHint"></span>
-                        </summary>
-                        <dl id="fmList"></dl>
-                    </details>
-                    <div class="markdown-body" id="article" tabindex="-1"></div>
-                    <div class="doc-end">
-                        <span class="mono-note">END OF DOCUMENT</span>
-                        <button type="button" class="text-button" id="btnClear">닫기</button>
+                <article class="doc" id="doc" tabindex="-1">
+                    <div class="doc-inner">
+                        <header class="doc-head" id="docHead">
+                            <p class="doc-eyebrow" id="docEyebrow">MARKDOWN</p>
+                            <h2 class="doc-title" id="docTitle">샘플 문서</h2>
+                            <p class="doc-summary" id="docSummary" hidden></p>
+                            <div class="doc-tags" id="docTags"></div>
+                        </header>
+                        <details class="frontmatter-card" id="fmCard" hidden>
+                            <summary>
+                                <span class="mono-note">FRONTMATTER</span>
+                                <span class="fm-hint" id="fmHint"></span>
+                            </summary>
+                            <dl id="fmList"></dl>
+                        </details>
+                        <div class="markdown-body" id="article" tabindex="-1"></div>
+                        <div class="doc-end">
+                            <span class="mono-note">END OF DOCUMENT</span>
+                            <button type="button" class="text-button" id="btnClear">닫기</button>
+                        </div>
                     </div>
                 </article>
             </div>
@@ -134,30 +132,48 @@
                 </div>
             </div>
         </section>
-
-        <section class="notes shell" aria-label="사용 안내">
-            <div>
-                <span class="mono-note">URL · CORS</span>
-                <p>다른 사이트의 파일은 그 사이트가 CORS를 허용해야 열립니다. GitHub 원문(raw.githubusercontent.com)은 허용되지만, 일반 블로그·드라이브 링크는 막히는 경우가 많습니다. 그때는 파일을 내려받아 열거나 본문을 붙여넣으면 됩니다.</p>
-            </div>
-            <div>
-                <span class="mono-note">ZIP · POSTS/ASSETS</span>
-                <p><strong>ZIP 저장</strong>은 본문을 <code>posts/{slug}-{해시}.md</code>로, 이미지는 <code>assets/{해시}.png</code>처럼 내용 해시를 이름으로 삼아 담습니다. 같은 이미지는 한 번만 저장되고, 본문 경로도 <code>/assets/…</code>로 함께 바뀝니다. 이미지는 붙여넣은 본문·로컬 파일·URL 어디서 왔든 모읍니다.</p>
-            </div>
-            <div>
-                <span class="mono-note">SHARE · SANITIZE</span>
-                <p>공유 링크는 문서를 압축해 URL 뒤에 담습니다. 렌더링 결과는 DOMPurify를 거쳐 스크립트가 실행되지 않습니다.</p>
-            </div>
-        </section>
     </main>
 
-    <footer class="site-footer">
-        <div class="footer-inner shell">
-            <span>© 2026 HD2Lab</span>
-            <span class="footer-note">++ OPEN · READ · SHARE ++</span>
-            <a href="/">Web-HQ <span aria-hidden="true">↗</span></a>
-        </div>
-    </footer>
+    <dialog id="helpDialog" class="md-dialog help-dialog" aria-labelledby="helpTitle">
+        <form method="dialog" class="md-dialog-body">
+            <div class="md-dialog-head">
+                <div>
+                    <p class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>PKPilot 0008 · Markdown</p>
+                    <h2 id="helpTitle">Read it as written.</h2>
+                </div>
+                <button type="submit" class="icon-button" aria-label="닫기" value="close">✕</button>
+            </div>
+            <p class="help-lede">.md 파일을 열거나 붙여넣으면 GFM 그대로 읽힙니다. 목차로 넘나들고, 코드는 한 번에 복사하고, 링크 하나로 통째로 공유할 수 있습니다.</p>
+            <ul class="head-chips" aria-label="Viewer features">
+                <li>파일 열기 · 드래그&amp;드롭</li>
+                <li>GFM · 문법 하이라이팅</li>
+                <li>목차 · 코드 복사</li>
+                <li>인쇄/PDF · 공유 링크</li>
+                <li>ZIP · posts/assets</li>
+            </ul>
+
+            <div class="help-notes">
+                <div>
+                    <span class="mono-note">URL · CORS</span>
+                    <p>다른 사이트의 파일은 그 사이트가 CORS를 허용해야 열립니다. GitHub 원문(raw.githubusercontent.com)은 허용되지만, 일반 블로그·드라이브 링크는 막히는 경우가 많습니다. 그때는 파일을 내려받아 열거나 본문을 붙여넣으면 됩니다.</p>
+                </div>
+                <div>
+                    <span class="mono-note">ZIP · POSTS/ASSETS</span>
+                    <p><strong>ZIP 저장</strong>은 본문을 <code>posts/{slug}-{해시}.md</code>로, 이미지는 <code>assets/{해시}.png</code>처럼 내용 해시를 이름으로 삼아 담습니다. 같은 이미지는 한 번만 저장되고, 본문 경로도 <code>/assets/…</code>로 함께 바뀝니다. 이미지는 붙여넣은 본문·로컬 파일·URL 어디서 왔든 모읍니다.</p>
+                </div>
+                <div>
+                    <span class="mono-note">SHARE · SANITIZE</span>
+                    <p>공유 링크는 문서를 압축해 URL 뒤에 담습니다. 렌더링 결과는 DOMPurify를 거쳐 스크립트가 실행되지 않습니다.</p>
+                </div>
+            </div>
+
+            <div class="help-foot">
+                <span>© 2026 HD2Lab</span>
+                <span class="footer-note">++ OPEN · READ · SHARE ++</span>
+                <a href="/">Web-HQ <span aria-hidden="true">↗</span></a>
+            </div>
+        </form>
+    </dialog>
 
     <dialog id="pasteDialog" class="md-dialog" aria-labelledby="pasteTitle">
         <form method="dialog" class="md-dialog-body">
