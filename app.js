@@ -90,8 +90,10 @@
     const state = {
         name: SAMPLE_NAME,
         source: '',
+        sourceUrl: '',
         markdown: '',
         observer: null,
+        localImages: new Map(),
     };
 
     /* ---------------------------------------------------------------- markdown */
@@ -194,7 +196,7 @@
 
     function toast(message, kind) {
         el.toast.innerHTML = message;
-        el.toast.className = 'toast' + (kind === 'err' ? ' is-err' : kind === 'ok' ? ' is-ok' : '');
+        el.toast.className = 'toast' + (kind === 'err' ? ' is-err' : kind === 'ok' ? ' is-ok' : kind === 'warn' ? ' is-warn' : '');
         el.toast.hidden = false;
         window.clearTimeout(toast._timer);
         toast._timer = window.setTimeout(() => { el.toast.hidden = true; }, 4200);
@@ -225,8 +227,7 @@
         }
     }
 
-    function download(name, content, type) {
-        const blob = new Blob([content], { type: type || 'text/plain;charset=utf-8' });
+    function downloadBlob(name, blob) {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
@@ -234,7 +235,115 @@
         document.body.appendChild(link);
         link.click();
         link.remove();
-        window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+        window.setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+
+    function download(name, content, type) {
+        downloadBlob(name, new Blob([content], { type: type || 'text/plain;charset=utf-8' }));
+    }
+
+    /* ---------------------------------------------------------------- local images */
+    function normalizePath(value) {
+        let out = String(value == null ? '' : value).trim();
+        if (!out) return '';
+        try { out = decodeURIComponent(out); } catch (error) { /* keep the raw string */ }
+        return out
+            .replace(/\\/g, '/')
+            .split('?')[0]
+            .split('#')[0]
+            .replace(/^\.\//, '')
+            .replace(/^\/+/, '')
+            .toLowerCase();
+    }
+
+    const IMAGE_NAME_RE = /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico|tiff?|heic|heif)$/i;
+
+    function isImageFile(file) {
+        if (!file) return false;
+        return /^image\//i.test(file.type || '') || IMAGE_NAME_RE.test(file.name || '');
+    }
+
+    function isMarkdownFile(file) {
+        if (!file) return false;
+        if (/\.(md|markdown|mdown|txt)$/i.test(file.name || '')) return true;
+        return /^text\//i.test(file.type || '') && !/^text\/html/i.test(file.type || '');
+    }
+
+    /* local files are kept by file name and relative path so the document can find them */
+    function rememberLocalImages(files) {
+        const added = [];
+        files.forEach((file) => {
+            if (!isImageFile(file)) return;
+            const entry = {
+                file,
+                name: file.name,
+                relative: file.webkitRelativePath || '',
+                url: URL.createObjectURL(file),
+            };
+            const keys = [normalizePath(entry.relative), normalizePath(entry.name)].filter(Boolean);
+            if (!keys.length) return;
+            keys.forEach((key) => state.localImages.set(key, entry));
+            added.push(entry);
+        });
+        return added;
+    }
+
+    function findLocalImage(value) {
+        const key = normalizePath(value);
+        if (!key) return null;
+        const direct = state.localImages.get(key);
+        if (direct) return direct;
+        const base = key.split('/').pop();
+        const byBase = state.localImages.get(base);
+        if (byBase) return byBase;
+        let hit = null;
+        state.localImages.forEach((entry, mapKey) => {
+            if (hit) return;
+            if (mapKey.endsWith('/' + key) || key.endsWith('/' + mapKey)) hit = entry;
+        });
+        return hit;
+    }
+
+    /* raw.githubusercontent.com/{owner}/{repo}/{branch}/… — the repo root is where a leading /… starts */
+    function rawRepoRoot(sourceUrl) {
+        const hit = /^(https?:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/(?:refs\/(?:heads|tags)\/)?[^/]+\/)/i.exec(String(sourceUrl || ''));
+        return hit ? hit[1] : '';
+    }
+
+    function absoluteImageUrl(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        if (/^https?:\/\//i.test(raw)) return raw;
+        if (/^\/\//.test(raw)) return `${location.protocol}${raw}`;
+        const base = state.sourceUrl || document.baseURI || location.href;
+        if (raw.startsWith('/')) {
+            const root = rawRepoRoot(state.sourceUrl);
+            if (root) {
+                try { return new URL(raw.replace(/^\/+/, ''), root).href; } catch (error) { /* fall through */ }
+            }
+        }
+        try { return new URL(raw, base).href; } catch (error) { return ''; }
+    }
+
+    /* relative images follow the document: local file map first, then the URL the doc came from */
+    function previewImageSrc(raw) {
+        const value = String(raw || '').trim();
+        if (!value) return '';
+        if (/^(?:data:|blob:)/i.test(value)) return value;
+        const local = findLocalImage(value);
+        if (local) return local.url;
+        if (/^https?:\/\//i.test(value)) return value;
+        const absolute = absoluteImageUrl(value);
+        return absolute || value;
+    }
+
+    function refreshImageSources() {
+        el.article.querySelectorAll('img').forEach((image) => {
+            const raw = image.getAttribute('src');
+            if (!raw) return;
+            const next = previewImageSrc(raw);
+            if (next && next !== raw) image.setAttribute('src', next);
+        });
     }
 
     /* ---------------------------------------------------------------- render */
@@ -247,6 +356,7 @@
         state.markdown = text;
         state.name = name || SAMPLE_NAME;
         state.source = source || '';
+        state.sourceUrl = /^https?:\/\//i.test(state.source) ? state.source : '';
 
         /* first h1 becomes the document title */
         const firstHeading = el.article.querySelector('h1');
@@ -303,6 +413,7 @@
         buildToc();
         paintStats(parsed.body);
         highlightActive();
+        refreshImageSources();
 
         /* a new document replaces whatever the share link pointed to */
         if (location.hash.indexOf('#md=') === 0 && source !== '공유 링크') {
@@ -419,10 +530,8 @@
     /* ---------------------------------------------------------------- inputs */
     function readFile(file) {
         if (!file) return;
-        const okName = /\.(md|markdown|mdown|txt)$/i.test(file.name);
-        const okType = /^text\//i.test(file.type || '');
-        if (!okName && !okType) {
-            toast('.md · .markdown · .txt 파일만 열 수 있습니다.', 'err');
+        if (!isMarkdownFile(file)) {
+            toast('.md · .markdown · .txt 문서나 이미지 파일을 열어 주세요.', 'err');
             return;
         }
         const reader = new FileReader();
@@ -435,10 +544,47 @@
         reader.readAsText(file, 'utf-8');
     }
 
+    /* the file picker and the drop zone both hand over a FileList: one document plus any images */
+    function handleFiles(fileList) {
+        const files = Array.from(fileList || []);
+        if (!files.length) return;
+        const images = files.filter(isImageFile);
+        const docs = files.filter(isMarkdownFile);
+        if (images.length) rememberLocalImages(images);
+
+        if (docs.length) {
+            readFile(docs[0]);
+            if (images.length) {
+                toast(`이미지 ${images.length}장을 함께 열었습니다. ZIP 저장 시 assets/에 담깁니다.`, 'ok');
+            }
+            return;
+        }
+        if (images.length) {
+            if (state.markdown && state.markdown.trim()) {
+                renderDocument(state.markdown, state.name, state.source);
+                refreshImageSources();
+            }
+            toast(`이미지 ${images.length}장을 열었습니다. ZIP 저장 시 assets/에 담깁니다.`, 'ok');
+            return;
+        }
+        toast('.md · .markdown · .txt 문서나 이미지 파일을 열어 주세요.', 'err');
+    }
+
+    /* github.com/{owner}/{repo}/blob|raw/{branch}/{path} reads through to the raw file */
+    function normalizeDocumentUrl(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        const hit = /^https?:\/\/(?:www\.)?github\.com\/([^/\s]+)\/([^/\s]+)\/(?:blob|raw)\/([^\s]+)$/i.exec(raw);
+        if (!hit) return raw;
+        return `https://raw.githubusercontent.com/${hit[1]}/${hit[2]}/${hit[3]}`;
+    }
+
     async function loadFromUrl(rawUrl) {
-        const value = String(rawUrl || '').trim();
-        if (!value) { toast('불러올 URL을 입력해 주세요.', 'err'); return; }
-        if (!/^https?:\/\//i.test(value)) { toast('http(s) URL만 불러올 수 있습니다.', 'err'); return; }
+        const input = String(rawUrl || '').trim();
+        if (!input) { toast('불러올 URL을 입력해 주세요.', 'err'); return; }
+        if (!/^https?:\/\//i.test(input)) { toast('http(s) URL만 불러올 수 있습니다.', 'err'); return; }
+        const value = normalizeDocumentUrl(input);
+        const converted = value !== input;
         toast('불러오는 중…');
         try {
             const response = await fetch(value, { mode: 'cors' });
@@ -447,8 +593,8 @@
             const name = decodeURIComponent((new URL(value).pathname.split('/').pop() || 'remote.md'));
             renderDocument(text, name, value);
             el.urlInput.value = value;
-            toast('URL 문서를 열었습니다.', 'ok');
-            announce('URL 문서를 열었습니다.');
+            toast(converted ? 'GitHub 원문(raw) 주소로 바꾸어 불러왔습니다.' : 'URL 문서를 열었습니다.', 'ok');
+            announce(converted ? 'GitHub 원문 문서를 열었습니다.' : 'URL 문서를 열었습니다.');
         } catch (error) {
             toast(`불러오지 못했습니다 (${escapeHtml(error.message)}). 이 사이트가 CORS를 허용하지 않으면 파일로 내려받아 열거나 본문을 붙여넣어 주세요.`, 'err');
         }
@@ -491,6 +637,414 @@
         }
         if (params.get('url')) return { url: params.get('url') };
         return null;
+    }
+
+    /* ---------------------------------------------------------------- sha256 */
+    /* crypto.subtle is missing on plain-http origins and file://, so the export keeps a pure JS copy */
+    const SHA256_K = new Uint32Array([
+        0x428A2F98, 0x71374491, 0xB5C0FBCF, 0xE9B5DBA5, 0x3956C25B, 0x59F111F1, 0x923F82A4, 0xAB1C5ED5,
+        0xD807AA98, 0x12835B01, 0x243185BE, 0x550C7DC3, 0x72BE5D74, 0x80DEB1FE, 0x9BDC06A7, 0xC19BF174,
+        0xE49B69C1, 0xEFBE4786, 0x0FC19DC6, 0x240CA1CC, 0x2DE92C6F, 0x4A7484AA, 0x5CB0A9DC, 0x76F988DA,
+        0x983E5152, 0xA831C66D, 0xB00327C8, 0xBF597FC7, 0xC6E00BF3, 0xD5A79147, 0x06CA6351, 0x14292967,
+        0x27B70A85, 0x2E1B2138, 0x4D2C6DFC, 0x53380D13, 0x650A7354, 0x766A0ABB, 0x81C2C92E, 0x92722C85,
+        0xA2BFE8A1, 0xA81A664B, 0xC24B8B70, 0xC76C51A3, 0xD192E819, 0xD6990624, 0xF40E3585, 0x106AA070,
+        0x19A4C116, 0x1E376C08, 0x2748774C, 0x34B0BCB5, 0x391C0CB3, 0x4ED8AA4A, 0x5B9CCA4F, 0x682E6FF3,
+        0x748F82EE, 0x78A5636F, 0x84C87814, 0x8CC70208, 0x90BEFFFA, 0xA4506CEB, 0xBEF9A3F7, 0xC67178F2,
+    ]);
+
+    function rotateRight(value, bits) {
+        return ((value >>> bits) | (value << (32 - bits))) >>> 0;
+    }
+
+    function sha256Fallback(bytes) {
+        const input = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        const paddedLength = Math.ceil((input.length + 9) / 64) * 64;
+        const padded = new Uint8Array(paddedLength);
+        padded.set(input);
+        padded[input.length] = 0x80;
+        const view = new DataView(padded.buffer);
+        const bitLength = input.length * 8;
+        view.setUint32(paddedLength - 8, Math.floor(bitLength / 0x100000000));
+        view.setUint32(paddedLength - 4, bitLength >>> 0);
+
+        let h0 = 0x6A09E667, h1 = 0xBB67AE85, h2 = 0x3C6EF372, h3 = 0xA54FF53A;
+        let h4 = 0x510E527F, h5 = 0x9B05688C, h6 = 0x1F83D9AB, h7 = 0x5BE0CD19;
+        const w = new Uint32Array(64);
+
+        for (let offset = 0; offset < paddedLength; offset += 64) {
+            for (let i = 0; i < 16; i += 1) w[i] = view.getUint32(offset + i * 4);
+            for (let i = 16; i < 64; i += 1) {
+                const s0 = rotateRight(w[i - 15], 7) ^ rotateRight(w[i - 15], 18) ^ (w[i - 15] >>> 3);
+                const s1 = rotateRight(w[i - 2], 17) ^ rotateRight(w[i - 2], 19) ^ (w[i - 2] >>> 10);
+                w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+            }
+            let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+            for (let i = 0; i < 64; i += 1) {
+                const s1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
+                const choice = (e & f) ^ (~e & g);
+                const temp1 = (h + s1 + choice + SHA256_K[i] + w[i]) >>> 0;
+                const s0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
+                const majority = (a & b) ^ (a & c) ^ (b & c);
+                const temp2 = (s0 + majority) >>> 0;
+                h = g;
+                g = f;
+                f = e;
+                e = (d + temp1) >>> 0;
+                d = c;
+                c = b;
+                b = a;
+                a = (temp1 + temp2) >>> 0;
+            }
+            h0 = (h0 + a) >>> 0;
+            h1 = (h1 + b) >>> 0;
+            h2 = (h2 + c) >>> 0;
+            h3 = (h3 + d) >>> 0;
+            h4 = (h4 + e) >>> 0;
+            h5 = (h5 + f) >>> 0;
+            h6 = (h6 + g) >>> 0;
+            h7 = (h7 + h) >>> 0;
+        }
+
+        const digest = new Uint8Array(32);
+        const outView = new DataView(digest.buffer);
+        [h0, h1, h2, h3, h4, h5, h6, h7].forEach((word, index) => outView.setUint32(index * 4, word));
+        return digest;
+    }
+
+    function toHex(bytes) {
+        let out = '';
+        for (let i = 0; i < bytes.length; i += 1) out += bytes[i].toString(16).padStart(2, '0');
+        return out;
+    }
+
+    async function sha256Hex(bytes) {
+        const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        const subtle = window.crypto && window.crypto.subtle;
+        if (subtle && typeof subtle.digest === 'function') {
+            try {
+                const digest = await subtle.digest('SHA-256', data);
+                return toHex(new Uint8Array(digest));
+            } catch (error) { /* not a secure context → pure JS below */ }
+        }
+        return toHex(sha256Fallback(data));
+    }
+
+    /* ---------------------------------------------------------------- image refs */
+    /* code fences and inline code are reported as ranges so image syntax inside them is left alone */
+    function codeRanges(src) {
+        const text = String(src || '');
+        const fenced = [];
+        const fence = /^ {0,3}(`{3,}|~{3,})[^\n]*$/gm;
+        let match;
+        while ((match = fence.exec(text))) {
+            const marker = match[1][0];
+            const size = match[1].length;
+            const start = match.index;
+            const closeRe = new RegExp('^ {0,3}' + (marker === '`' ? '`' : '~') + '{' + size + ',}[ \\t]*$', 'gm');
+            closeRe.lastIndex = fence.lastIndex;
+            const close = closeRe.exec(text);
+            const end = close ? close.index + close[0].length : text.length;
+            fenced.push([start, end]);
+            fence.lastIndex = end;
+        }
+
+        const ranges = fenced.slice();
+        const segments = [];
+        let cursor = 0;
+        fenced.forEach(([start, end]) => {
+            if (start > cursor) segments.push([cursor, start]);
+            cursor = Math.max(cursor, end);
+        });
+        if (cursor < text.length) segments.push([cursor, text.length]);
+
+        segments.forEach(([start, end]) => {
+            const chunk = text.slice(start, end);
+            const inline = /(`+)([^`]|[^`][\s\S]*?[^`])\1(?!`)/g;
+            let hit;
+            while ((hit = inline.exec(chunk))) {
+                const spanStart = start + hit.index;
+                ranges.push([spanStart, spanStart + hit[0].length]);
+            }
+        });
+
+        return ranges.sort((a, b) => a[0] - b[0]);
+    }
+
+    function inRanges(index, ranges) {
+        for (let i = 0; i < ranges.length; i += 1) {
+            if (index < ranges[i][0]) return false;
+            if (index < ranges[i][1]) return true;
+        }
+        return false;
+    }
+
+    function cleanImageUrl(value) {
+        return String(value || '')
+            .replace(/&amp;/g, '&')
+            .replace(/&#38;/g, '&')
+            .trim();
+    }
+
+    /* every markdown image and <img src> outside code, as exact [start, end) of the url text */
+    function collectImageRefs(src) {
+        const text = String(src || '');
+        const ranges = codeRanges(text);
+        const refs = [];
+        let hit;
+
+        const markdownImage = /!\[[^\]]*\]\(\s*(<[^>]*>|(?:[^\s()]|\([^\s()]*\))+)(?:\s+(?:"[^"]*"|'[^']*'|\([^\s()]*\)))?\s*\)/g;
+        while ((hit = markdownImage.exec(text))) {
+            if (inRanges(hit.index, ranges)) continue;
+            const raw = hit[1];
+            const open = hit[0].indexOf('](');
+            if (open < 0) continue;
+            let start = hit.index + hit[0].indexOf(raw, open + 2);
+            if (start < hit.index) continue;
+            let end = start + raw.length;
+            let url = raw;
+            if (raw.startsWith('<') && raw.endsWith('>')) {
+                url = raw.slice(1, -1);
+                start += 1;
+                end -= 1;
+            }
+            const value = cleanImageUrl(url);
+            if (!value) continue;
+            refs.push({ url: value, start, end });
+        }
+
+        const htmlImage = /<img\b[^>]*>/gi;
+        while ((hit = htmlImage.exec(text))) {
+            if (inRanges(hit.index, ranges)) continue;
+            const tag = hit[0];
+            const attr = /(\bsrc\s*=\s*)("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i.exec(tag);
+            if (!attr) continue;
+            const value = attr[3] !== undefined ? attr[3] : (attr[4] !== undefined ? attr[4] : attr[5]);
+            if (!value) continue;
+            const quoted = /^["']/.test(attr[2]) ? 1 : 0;
+            const valueIndex = tag.indexOf(attr[0]) + attr[1].length + quoted;
+            refs.push({
+                url: cleanImageUrl(value),
+                start: hit.index + valueIndex,
+                end: hit.index + valueIndex + value.length,
+            });
+        }
+
+        return refs;
+    }
+
+    /* ---------------------------------------------------------------- image bytes */
+    const MIME_EXT = {
+        'image/png': 'png', 'image/apng': 'png', 'image/jpeg': 'jpg', 'image/jpg': 'jpg',
+        'image/gif': 'gif', 'image/webp': 'webp', 'image/avif': 'avif', 'image/svg+xml': 'svg',
+        'image/bmp': 'bmp', 'image/x-icon': 'ico', 'image/vnd.microsoft.icon': 'ico',
+        'image/tiff': 'tif', 'image/heic': 'heic', 'image/heif': 'heif',
+    };
+
+    function extensionFromMime(mime) {
+        return MIME_EXT[String(mime || '').toLowerCase().split(';')[0].trim()] || '';
+    }
+
+    function extensionFromName(name) {
+        const hit = /\.([a-z0-9]{1,5})$/i.exec(String(name || '').split(/[?#]/)[0]);
+        if (!hit) return '';
+        const ext = hit[1].toLowerCase();
+        return ext === 'jpeg' ? 'jpg' : ext === 'tiff' ? 'tif' : ext;
+    }
+
+    function sniffExtension(bytes) {
+        if (!bytes || bytes.length < 4) return '';
+        if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) return 'png';
+        if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) return 'jpg';
+        if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'gif';
+        if (bytes[0] === 0x42 && bytes[1] === 0x4D) return 'bmp';
+        if (bytes.length > 12 && bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46
+            && bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) return 'webp';
+        return '';
+    }
+
+    function looksLikeSvg(bytes) {
+        if (!bytes || !bytes.length) return false;
+        const head = String.fromCharCode.apply(null, Array.prototype.slice.call(bytes, 0, Math.min(bytes.length, 256)));
+        return /^\s*(?:<\?xml|<!--|<svg)/i.test(head);
+    }
+
+    function decodeDataImage(value) {
+        const hit = /^data:(image\/[a-z0-9.+-]+)((?:;[^,;]*)*),([\s\S]*)$/i.exec(String(value || ''));
+        if (!hit) return null;
+        const mime = hit[1].toLowerCase();
+        const params = hit[2] || '';
+        const payload = hit[3] || '';
+        try {
+            if (/;base64/i.test(params)) {
+                const binary = window.atob(payload.replace(/[\s\r\n]+/g, ''));
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+                return bytes.length ? { bytes, ext: extensionFromMime(mime) || 'png' } : null;
+            }
+            const bytes = new TextEncoder().encode(decodeURIComponent(payload));
+            return bytes.length ? { bytes, ext: extensionFromMime(mime) || 'svg' } : null;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    function bytesFrom(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(new Uint8Array(reader.result));
+            reader.onerror = () => reject(reader.error || new Error('read error'));
+            reader.readAsArrayBuffer(file);
+        });
+    }
+
+    /* one image url → bytes, from an inline data uri, a file the user opened, or the network */
+    async function collectImage(url) {
+        const value = String(url || '').trim();
+        if (!value) return null;
+        if (/^data:/i.test(value)) return decodeDataImage(value);
+
+        if (!/^(?:https?:)?\/\//i.test(value)) {
+            const local = findLocalImage(value);
+            if (local) {
+                try {
+                    const bytes = await bytesFrom(local.file);
+                    if (bytes.length) {
+                        const ext = extensionFromMime(local.file.type)
+                            || extensionFromName(local.file.name)
+                            || sniffExtension(bytes)
+                            || (looksLikeSvg(bytes) ? 'svg' : 'png');
+                        return { bytes, ext, origin: 'local' };
+                    }
+                } catch (error) { /* fall through to fetch */ }
+            }
+        }
+
+        const absolute = absoluteImageUrl(value);
+        if (!absolute || !/^https?:\/\//i.test(absolute)) return null;
+        try {
+            const response = await fetch(absolute, { mode: 'cors', credentials: 'omit' });
+            if (!response.ok) return null;
+            const blob = await response.blob();
+            const bytes = new Uint8Array(await blob.arrayBuffer());
+            if (!bytes.length) return null;
+            const ext = extensionFromMime(blob.type)
+                || extensionFromName(absolute)
+                || sniffExtension(bytes)
+                || (looksLikeSvg(bytes) ? 'svg' : 'png');
+            return { bytes, ext, origin: 'remote' };
+        } catch (error) {
+            return null;
+        }
+    }
+
+    /* ---------------------------------------------------------------- zip bundle */
+    const GENERIC_SLUGS = ['pasted', 'shared-document', 'sample-markdown', 'document', 'section'];
+
+    function documentSlug() {
+        const name = String(state.name || '').replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '');
+        const fromName = slug(name);
+        if (fromName && !GENERIC_SLUGS.includes(fromName)) return fromName;
+        const fromTitle = slug(el.docTitle.textContent || '');
+        if (fromTitle && !GENERIC_SLUGS.includes(fromTitle)) return fromTitle;
+        return 'document';
+    }
+
+    async function buildZipBundle(markdown) {
+        const text = String(markdown || '');
+        const refs = collectImageRefs(text);
+        const pending = [];
+        refs.forEach((ref) => { if (!pending.includes(ref.url)) pending.push(ref.url); });
+
+        const resolved = new Map();
+        const assets = [];
+        const hashToPath = new Map();
+
+        for (let i = 0; i < pending.length; i += 1) {
+            const url = pending[i];
+            const image = await collectImage(url);
+            if (!image) continue;
+            const hex = await sha256Hex(image.bytes);
+            const hash12 = hex.slice(0, 12);
+            const ext = image.ext || 'png';
+            let path = hashToPath.get(hash12);
+            if (!path) {
+                path = `assets/${hash12}.${ext}`;
+                hashToPath.set(hash12, path);
+                assets.push({ path, bytes: image.bytes });
+            }
+            /* the zip entry is assets/…, the body points at the site root: /assets/… */
+            resolved.set(url, `/${path}`);
+        }
+
+        let output = text;
+        let replaced = 0;
+        refs.slice().sort((a, b) => b.start - a.start).forEach((ref) => {
+            const path = resolved.get(ref.url);
+            if (!path) return;
+            output = output.slice(0, ref.start) + path + output.slice(ref.end);
+            replaced += 1;
+        });
+
+        const hash8 = (await sha256Hex(new TextEncoder().encode(output))).slice(0, 8);
+        return {
+            markdown: output,
+            assets,
+            replaced,
+            missed: pending.filter((url) => !resolved.has(url)).length,
+            images: assets.length,
+            duplicates: Math.max(0, replaced - assets.length),
+            hash8,
+            slug: documentSlug(),
+        };
+    }
+
+    async function exportZip() {
+        const button = $('btnExportZip');
+        if (!window.JSZip) {
+            toast('ZIP 라이브러리를 불러오지 못했습니다. 새로고침한 뒤 다시 시도해 주세요.', 'err');
+            return;
+        }
+        if (!state.markdown || !state.markdown.trim()) {
+            toast('먼저 문서를 열어 주세요. ZIP으로 저장할 내용이 없습니다.', 'err');
+            return;
+        }
+        if (button && button.disabled) return;
+
+        const label = button ? button.textContent : '';
+        if (button) {
+            button.disabled = true;
+            button.setAttribute('aria-busy', 'true');
+            button.textContent = '만드는 중…';
+        }
+        try {
+            const bundle = await buildZipBundle(state.markdown);
+            const base = `${bundle.slug}-${bundle.hash8}`;
+            const zip = new window.JSZip();
+            zip.file(`posts/${base}.md`, bundle.markdown, { createFolders: false });
+            bundle.assets.forEach((asset) => zip.file(asset.path, asset.bytes, { binary: true, createFolders: false }));
+            const blob = await zip.generateAsync({
+                type: 'blob',
+                compression: 'DEFLATE',
+                compressionOptions: { level: 6 },
+                mimeType: 'application/zip',
+            });
+            downloadBlob(`${base}.zip`, blob);
+
+            const notes = [`ZIP 파일을 내려받았습니다. 문서는 posts/${base}.md로 담았습니다.`];
+            if (bundle.images) notes.push(`이미지 ${bundle.images}장을 assets/에 담았습니다.`);
+            if (bundle.duplicates) notes.push(`같은 이미지 ${bundle.duplicates}건은 한 번만 저장했습니다.`);
+            if (bundle.missed) notes.push(`이미지 ${bundle.missed}장은 담지 못해 원본 주소를 그대로 두었습니다.`);
+            toast(notes.join(' '), bundle.missed ? 'warn' : 'ok');
+            announce('ZIP 파일을 내려받았습니다.');
+        } catch (error) {
+            toast(`ZIP 파일을 만들지 못했습니다 (${escapeHtml(error && error.message ? error.message : '알 수 없는 오류')}). 잠시 뒤 다시 시도해 주세요.`, 'err');
+        } finally {
+            if (button) {
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+                button.textContent = label || 'ZIP 저장';
+            }
+        }
     }
 
     /* ---------------------------------------------------------------- export */
@@ -575,7 +1129,7 @@ ${bodyHtml}
     function wireEvents() {
         $('btnOpenFile').addEventListener('click', () => el.fileInput.click());
         el.fileInput.addEventListener('change', (event) => {
-            readFile(event.target.files && event.target.files[0]);
+            handleFiles(event.target.files);
             event.target.value = '';
         });
         $('btnSample').addEventListener('click', () => {
@@ -607,6 +1161,7 @@ ${bodyHtml}
         $('btnShare').addEventListener('click', shareLink);
         $('btnPrint').addEventListener('click', () => window.print());
         $('btnExport').addEventListener('click', exportHtml);
+        $('btnExportZip').addEventListener('click', exportZip);
         $('btnClear').addEventListener('click', clearDocument);
         el.btnToc.addEventListener('click', () => {
             const open = el.tocPanel.classList.toggle('is-open');
@@ -634,8 +1189,7 @@ ${bodyHtml}
             event.preventDefault();
             depth = 0;
             el.dropHint.hidden = true;
-            const file = event.dataTransfer.files && event.dataTransfer.files[0];
-            readFile(file);
+            handleFiles(event.dataTransfer.files);
         });
     }
 
@@ -668,8 +1222,23 @@ ${bodyHtml}
         buildShareLink,
         sanitize,
         readFile,
+        handleFiles,
         loadFromUrl,
         clearDocument,
+        exportZip,
+        buildZipBundle,
+        collectImageRefs,
+        collectImage,
+        codeRanges,
+        sha256Hex,
+        sha256Fallback,
+        toHex,
+        normalizeDocumentUrl,
+        normalizePath,
+        rememberLocalImages,
+        findLocalImage,
+        previewImageSrc,
+        documentSlug,
         state,
     };
 })();

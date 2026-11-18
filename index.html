@@ -3,21 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="HD2Lab Markdown Viewer — .md 파일을 열거나 붙여넣으면 GFM 그대로 읽힙니다. 목차, 코드 복사, 인쇄/PDF, URL 공유 링크까지 브라우저 안에서.">
+    <meta name="description" content="HD2Lab Markdown Viewer — .md 파일을 열거나 붙여넣으면 GFM 그대로 읽힙니다. 목차, 코드 복사, 인쇄/PDF, ZIP 내보내기까지 브라우저 안에서.">
     <meta name="theme-color" content="#FAFAFD">
     <title>HD2Lab | Markdown Viewer</title>
     <link rel="canonical" href="https://hyangdan2.github.io/PKPilot0008/">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="HD2Lab · Markdown Viewer">
     <meta property="og:title" content="HD2Lab | Markdown Viewer">
-    <meta property="og:description" content="GFM 렌더러 · 목차 · 코드 복사 · 인쇄/PDF · 공유 링크.">
+    <meta property="og:description" content="GFM 렌더러 · 목차 · 코드 복사 · 인쇄/PDF · ZIP 내보내기.">
     <meta property="og:url" content="https://hyangdan2.github.io/PKPilot0008/">
     <meta name="twitter:card" content="summary">
     <!-- HD2Lab shared theme: applies the stored hd2-theme before first paint (no flash) -->
     <script>try{var h=localStorage.getItem('hd2-theme');document.documentElement.setAttribute('data-theme',h==='dark'?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
     <link rel="stylesheet" href="./assets/hd2-theme.css?v=20261117-navy">
     <script src="./assets/hd2-theme.js?v=20261117-navy" defer></script>
-    <link rel="stylesheet" href="style.css?v=20261117-polite">
+    <link rel="stylesheet" href="style.css?v=20261118-zip">
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg?v=20261116-softiris">
     <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32.png?v=20261116-softiris">
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png?v=20261116-softiris">
@@ -26,7 +26,8 @@
     <script src="js/vendor/highlight.min.js" defer></script>
     <script src="js/vendor/purify.min.js" defer></script>
     <script src="js/vendor/lz-string.min.js" defer></script>
-    <script src="app.js?v=20261117-polite" defer></script>
+    <script src="js/vendor/jszip.min.js" defer></script>
+    <script src="app.js?v=20261118-zip" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#doc">본문으로 건너뛰기</a>
@@ -53,14 +54,15 @@
                 <li>GFM · 문법 하이라이팅</li>
                 <li>목차 · 코드 복사</li>
                 <li>인쇄/PDF · 공유 링크</li>
+                <li>ZIP · posts/assets</li>
             </ul>
         </section>
 
         <section class="viewer shell" aria-label="Markdown viewer">
             <div class="io-bar">
                 <div class="io-group">
-                    <button type="button" class="button button-primary" id="btnOpenFile">파일 열기</button>
-                    <input type="file" id="fileInput" accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain" hidden>
+                    <button type="button" class="button button-primary" id="btnOpenFile" title="문서와 이미지를 함께 열 수 있습니다">파일 열기</button>
+                    <input type="file" id="fileInput" accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain,image/*" multiple hidden>
                     <button type="button" class="button button-ghost" id="btnPaste">텍스트 붙여넣기</button>
                     <button type="button" class="button button-ghost" id="btnSample">샘플 문서</button>
                 </div>
@@ -68,6 +70,7 @@
                     <button type="button" class="button button-ghost" id="btnShare">공유 링크 복사</button>
                     <button type="button" class="button button-ghost" id="btnPrint">인쇄 / PDF</button>
                     <button type="button" class="button button-ghost" id="btnExport">HTML 저장</button>
+                    <button type="button" class="button button-ghost" id="btnExportZip" title="본문과 이미지를 posts/ · assets/ 구조로 묶어 저장합니다">ZIP 저장</button>
                 </div>
             </div>
 
@@ -126,8 +129,8 @@
 
             <div class="drop-hint" id="dropHint" hidden>
                 <div class="drop-hint-inner">
-                    <strong>.md 파일을 놓으면 바로 읽습니다</strong>
-                    <span>.md · .markdown · .txt</span>
+                    <strong>.md 파일과 이미지를 놓으면 바로 읽습니다</strong>
+                    <span>.md · .markdown · .txt · 이미지</span>
                 </div>
             </div>
         </section>
@@ -136,6 +139,10 @@
             <div>
                 <span class="mono-note">URL · CORS</span>
                 <p>다른 사이트의 파일은 그 사이트가 CORS를 허용해야 열립니다. GitHub 원문(raw.githubusercontent.com)은 허용되지만, 일반 블로그·드라이브 링크는 막히는 경우가 많습니다. 그때는 파일을 내려받아 열거나 본문을 붙여넣으면 됩니다.</p>
+            </div>
+            <div>
+                <span class="mono-note">ZIP · POSTS/ASSETS</span>
+                <p><strong>ZIP 저장</strong>은 본문을 <code>posts/{slug}-{해시}.md</code>로, 이미지는 <code>assets/{해시}.png</code>처럼 내용 해시를 이름으로 삼아 담습니다. 같은 이미지는 한 번만 저장되고, 본문 경로도 <code>/assets/…</code>로 함께 바뀝니다. 이미지는 붙여넣은 본문·로컬 파일·URL 어디서 왔든 모읍니다.</p>
             </div>
             <div>
                 <span class="mono-note">SHARE · SANITIZE</span>

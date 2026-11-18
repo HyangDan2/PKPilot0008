@@ -93,7 +93,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .head-chips li { padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text-secondary); font-family: var(--mono); font-size: 10.5px; letter-spacing: .04em; }
 
 /* ---------- buttons ---------- */
-.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 9px 16px; border: 1px solid transparent; border-radius: var(--radius); font-size: 13px; font-weight: 650; letter-spacing: -.01em; text-decoration: none; transition: background .18s, border-color .18s, color .18s, transform .18s; }
+.button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 9px 16px; border: 1px solid transparent; border-radius: var(--radius); font-size: 13px; font-weight: 650; letter-spacing: -.01em; text-decoration: none; white-space: nowrap; transition: background .18s, border-color .18s, color .18s, transform .18s; }
 .button-primary { background: var(--accent); color: #FFFFFF; border-color: var(--accent); }
 .button-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 [data-theme="dark"] .button-primary { color: #0B1020; }
@@ -232,7 +232,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .drop-hint-inner span { display: block; margin-top: 6px; color: var(--text-secondary); font-family: var(--mono); font-size: 11px; letter-spacing: .08em; }
 
 /* ---------- notes / footer ---------- */
-.notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; padding-block: 10px 70px; }
+.notes { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; padding-block: 10px 70px; }
 .notes > div { padding: 18px 20px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface); }
 .notes p { margin: 10px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.85; }
 .site-footer { border-top: 1px solid var(--border); }
@@ -258,6 +258,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 
 .toast { position: fixed; z-index: 70; left: 50%; bottom: max(86px, env(safe-area-inset-bottom, 0px) + 86px); transform: translateX(-50%); max-width: min(92vw, 560px); padding: 12px 18px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 12.5px; line-height: 1.5; text-align: center; box-shadow: var(--shadow); }
 .toast.is-ok { border-color: var(--ok); }
+.toast.is-warn { border-color: var(--warn); color: var(--warn); }
 .toast.is-err { border-color: var(--danger); color: var(--danger); }
 .toast[hidden] { display: none; }
 
@@ -285,7 +286,8 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
     .io-bar { padding: 12px; gap: 8px; }
     .io-group { width: 100%; }
     .io-group-end { margin-left: 0; }
-    .io-group .button { flex: 1 1 auto; }
+    .io-group .button { flex: 1 1 auto; padding: 9px 11px; }
+    .io-group-end .button { flex: 1 1 calc(50% - 4px); }
     .url-bar { flex-wrap: wrap; padding: 10px 12px; gap: 8px; }
     .url-label { display: none; }
     .url-bar input { order: 1; flex: 1 1 100%; }
@@ -301,6 +303,10 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
     .footer-note { display: none; }
     .md-dialog-body { padding: 18px 16px; }
     .dialog-hint { margin-left: 0; width: 100%; }
+}
+@media (max-width: 420px) {
+    .io-group .button { padding: 9px 8px; font-size: 12.5px; }
+    .io-bar { padding: 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
