@@ -4,6 +4,19 @@ Live: <https://hyangdan2.github.io/PKPilot0008/>
 
 A read-only Markdown viewer that runs entirely in the browser. No backend, no build step.
 
+## Layout
+
+The page is an app shell pinned to the viewport — `100vw × 100dvh`, the window itself never
+scrolls. A slim 52px header sits on top, then the toolbars (`io-bar`, `url-bar`, `doc-bar`), and
+`.doc-layout` takes every remaining pixel as a two-column grid: the TOC on the left and the
+document on the right, each with its own `overflow-y: auto` scroll area. The document frame runs to
+the viewport edge while the running text keeps a ~960px measure. `app.js` measures scrolling
+against the document pane (TOC jumps, IntersectionObserver root, “맨 위로”), not the window.
+
+What used to sit above and below the viewer — the intro block and the URL/ZIP/share notes — is in
+the header `?` dialog, so it never pushes the viewer down. `@media print` unpins the shell
+(`height: auto; overflow: visible`) so the whole document prints or saves as PDF.
+
 ## Input
 
 - `.md` / `.markdown` / `.txt` file picker, and drag & drop anywhere on the page. The picker is
@@ -28,14 +41,16 @@ A read-only Markdown viewer that runs entirely in the browser. No backend, no bu
   first `#` heading becomes the document title. A collapsible **frontmatter meta card** lists every
   key/value pair of the block, so custom fields stay visible without entering the source.
 - Every code block gets a header with a language badge and a one-click copy button.
-- Headings get stable ids and feed the sticky TOC (sidebar on desktop, toggle panel on mobile).
+- Headings get stable ids and feed the TOC pane (sidebar on desktop, drawer under the doc-bar at
+  ≤1000px); clicking an entry scrolls the document pane, and the entry highlight follows the pane's
+  scroll position.
 - **Every rendered document is sanitized with DOMPurify** (`script`, `style`, `iframe`, `form`,
   `object`, `embed`, inline event handlers and `javascript:` URLs are removed).
 
 ## Output
 
 - `인쇄 / PDF` uses `window.print()` with a dedicated `@media print` stylesheet (chrome hidden,
-  paper colours, page-break hints).
+  the app shell unpinned to `height: auto; overflow: visible`, paper colours, page-break hints).
 - `HTML 저장` exports a standalone HTML file with the rendered document and an embedded stylesheet.
 - `ZIP 저장` builds a site-ready bundle in the browser with JSZip:
 
@@ -55,8 +70,8 @@ A read-only Markdown viewer that runs entirely in the browser. No backend, no bu
 ## Files
 
 ```
-index.html          the page (HD2Lab header, input bar, doc layout, dialogs)
-style.css           Soft Iris / Navy & Lavender tokens + document, TOC and print styles
+index.html          the app shell (52px header, toolbars, TOC + document panes, help/paste dialogs)
+style.css           Soft Iris / Navy & Lavender tokens + full-viewport shell, document, TOC, print
 app.js              parsing, rendering, TOC, share links, export, input handling
 js/vendor/          markdown-it 14.3.3, highlight.js 11.11.1, DOMPurify 3.2.6, lz-string 1.5.0, JSZip 3.10.1
 ```
