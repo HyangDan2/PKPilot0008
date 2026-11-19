@@ -1,14 +1,15 @@
 /* ==========================================================================
-   HD2Lab · PKPilot0008 — Markdown Viewer
+   HD2Markdown Viewer · PKPilot0008
    File / paste / URL input · GFM render · TOC · code copy · print · share
    ========================================================================== */
 (function () {
     'use strict';
 
+    const APP_NAME = 'HD2Markdown Viewer';
     const SAMPLE_NAME = 'sample-markdown.md';
     const SAMPLE = [
         '---',
-        'title: "Markdown Viewer 사용법"',
+        'title: "HD2Markdown Viewer"',
         'date: 2026-11-17',
         'category: notes',
         'summary: ".md 파일을 열고, 목차로 넘나들고, 코드를 복사하고, 링크 하나로 공유하기까지."',
@@ -395,7 +396,8 @@
 
         const title = (typeof data.title === 'string' && data.title.trim()) || bodyTitle || state.name;
         el.docTitle.textContent = title;
-        document.title = `${title} · HD2Lab Markdown Viewer`;
+        /* the sample document is the app itself, so its tab title is just the app name */
+        document.title = title === APP_NAME ? APP_NAME : `${title} · ${APP_NAME}`;
 
         const eyebrowParts = [];
         if (data.category) eyebrowParts.push(String(data.category).toUpperCase());
@@ -1296,7 +1298,7 @@
             image.setAttribute('src', htmlExportSrc(raw));
             image.removeAttribute('data-origin-src');
         });
-        const title = el.docTitle.textContent || 'HD2Lab Document';
+        const title = el.docTitle.textContent || APP_NAME;
         const html = standalone(title, clone.innerHTML);
         download(`${slug(title) || 'document'}.html`, html, 'text/html;charset=utf-8');
         toast('HTML 파일을 내려받았습니다.', 'ok');
@@ -1341,7 +1343,7 @@ footer{margin:56px auto 0;max-width:760px;color:#8B8598;font-size:11px;letter-sp
 <main>
 ${bodyHtml}
 </main>
-<footer>HD2Lab · Markdown Viewer</footer>
+<footer>HD2Markdown Viewer</footer>
 </body>
 </html>
 `;
@@ -1370,7 +1372,7 @@ ${bodyHtml}
         el.statWords.textContent = '0';
         el.statChars.textContent = '0';
         el.statRead.textContent = '0';
-        document.title = 'HD2Lab | Markdown Viewer';
+        document.title = APP_NAME;
         stripShareParams();
         resetPaneScroll();
         paintShareAffordance();
