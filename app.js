@@ -50,7 +50,7 @@
         '',
         '## 공유와 인쇄',
         '',
-        '`공유 링크 복사`를 누르면 문서가 압축되어 URL에 담깁니다. 같은 링크를 열면 같은 문서가 그대로 복원됩니다. 인쇄는 브라우저의 PDF 저장으로 이어집니다.',
+        'URL로 연 문서는 공유 버튼을 누르면 원본 링크(`?url=`)가 복사됩니다. 파일로 열거나 붙여넣은 문서는 `.md` 파일로 내려받아지고, 옆의 화살표 메뉴에서 `본문을 링크에 담기`(#md=)를 고르면 지금 본문이 링크 안에 담깁니다. 인쇄는 브라우저의 PDF 저장으로 이어집니다.',
         '',
         '---',
         '',
@@ -94,6 +94,8 @@
         name: SAMPLE_NAME,
         source: '',
         sourceUrl: '',
+        /* where the document on screen came from: url · file · paste · sample · share */
+        origin: 'sample',
         markdown: '',
         observer: null,
         headings: [],
@@ -368,7 +370,8 @@
     }
 
     /* ---------------------------------------------------------------- render */
-    function renderDocument(text, name, source) {
+    function renderDocument(text, name, source, options) {
+        const opts = options || {};
         const parsed = parseFrontmatter(String(text || ''));
         const data = parsed.data || {};
         const html = sanitize(md.render(parsed.body));
@@ -377,7 +380,10 @@
         state.markdown = text;
         state.name = name || SAMPLE_NAME;
         state.source = source || '';
-        state.sourceUrl = /^https?:\/\//i.test(state.source) ? state.source : '';
+        state.origin = opts.origin || (/^https?:\/\//i.test(state.source) ? 'url' : 'other');
+        /* the original URL belongs to the document on screen and nothing else:
+           only a successful URL load sets it, every other source clears it */
+        state.sourceUrl = state.origin === 'url' && /^https?:\/\//i.test(state.source) ? state.source : '';
 
         /* first h1 becomes the document title */
         const firstHeading = el.article.querySelector('h1');
@@ -436,11 +442,10 @@
         highlightActive();
         refreshImageSources();
         resetPaneScroll();
+        paintShareAffordance();
 
-        /* a new document replaces whatever the share link pointed to */
-        if (location.hash.indexOf('#md=') === 0 && source !== '공유 링크') {
-            try { history.replaceState(null, '', location.pathname + location.search); } catch (error) { /* ignore */ }
-        }
+        /* the address bar keeps a share payload only while that payload is the document on screen */
+        if (state.origin !== 'url' && state.origin !== 'share') stripShareParams();
     }
 
     function paintFrontmatterCard(data) {
@@ -636,7 +641,7 @@
         }
         const reader = new FileReader();
         reader.onload = () => {
-            renderDocument(String(reader.result || ''), file.name, '');
+            renderDocument(String(reader.result || ''), file.name, '', { origin: 'file' });
             announce(`${file.name} 문서를 열었습니다.`);
             toast(`${file.name} 열기 완료`, 'ok');
         };
@@ -661,7 +666,7 @@
         }
         if (images.length) {
             if (state.markdown && state.markdown.trim()) {
-                renderDocument(state.markdown, state.name, state.source);
+                renderDocument(state.markdown, state.name, state.source, { origin: state.origin });
                 refreshImageSources();
             }
             toast(`이미지 ${images.length}장을 열었습니다. ZIP 저장 시 assets/에 담깁니다.`, 'ok');
@@ -691,34 +696,162 @@
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const text = await response.text();
             const name = decodeURIComponent((new URL(value).pathname.split('/').pop() || 'remote.md'));
-            renderDocument(text, name, value);
+            renderDocument(text, name, value, { origin: 'url' });
             el.urlInput.value = value;
+            /* an address bar that already carried ?url= follows the document now open */
+            try {
+                const current = new URL(location.href);
+                if (current.searchParams.get('url')) {
+                    current.searchParams.set('url', value);
+                    current.hash = '';
+                    history.replaceState(null, '', `${current.pathname}${current.search}`);
+                }
+            } catch (error) { /* ignore */ }
             toast(converted ? 'GitHub 원문(raw) 주소로 바꾸어 불러왔습니다.' : 'URL 문서를 열었습니다.', 'ok');
             announce(converted ? 'GitHub 원문 문서를 열었습니다.' : 'URL 문서를 열었습니다.');
         } catch (error) {
+            /* the document on screen keeps its own share source — nothing is overwritten on failure */
             toast(`불러오지 못했습니다 (${escapeHtml(error.message)}). 이 사이트가 CORS를 허용하지 않으면 파일로 내려받아 열거나 본문을 붙여넣어 주세요.`, 'err');
         }
     }
 
     /* ---------------------------------------------------------------- share */
+    /* The address bar of the viewer itself — no share payload of its own. */
+    function viewerAddress() {
+        const url = new URL(location.href);
+        url.hash = '';
+        url.search = '';
+        return url;
+    }
+
+    /* ?url= — a short reference to the original document, reassembled with URL + URLSearchParams */
+    function buildUrlShareLink(originUrl) {
+        const target = String(originUrl || state.sourceUrl || '').trim();
+        if (!target) return null;
+        const url = viewerAddress();
+        url.searchParams.set('url', target);
+        return { url: url.href, target, kind: 'url', length: target.length };
+    }
+
+    /* #md= — the body itself, compressed (kept for documents that have no address of their own) */
     function buildShareLink() {
         if (!window.LZString) return null;
         const packed = window.LZString.compressToEncodedURIComponent(state.markdown || '');
-        return { url: `${location.origin}${location.pathname}#md=${packed}`, length: packed.length };
+        return { url: `${viewerAddress().href}#md=${packed}`, length: packed.length, kind: 'content' };
     }
 
-    async function shareLink() {
+    function hasDocument() {
+        return !!(state.markdown && state.markdown.trim());
+    }
+
+    /* url → the original link is the default; anything else → the .md file is the default */
+    function shareMode() {
+        return state.origin === 'url' && state.sourceUrl && hasDocument() ? 'url' : 'download';
+    }
+
+    async function copyUrlShareLink() {
+        const link = buildUrlShareLink();
+        if (!link) {
+            toast('원본 링크는 URL로 연 문서에만 만들 수 있습니다. 지금 문서는 .md 파일로 내려받아 주세요.', 'err');
+            return;
+        }
+        await copyText(link.url, '원본 링크를 복사했습니다. 링크를 열 때마다 그 주소의 원문을 다시 가져옵니다.');
+        announce('원본 링크를 복사했습니다.');
+    }
+
+    async function copyContentShareLink() {
         const link = buildShareLink();
         if (!link) { toast('공유 링크를 만들 수 없습니다 (압축 라이브러리 없음).', 'err'); return; }
         if (link.length > 12000) {
-            toast('문서가 너무 커서 URL에 담기 어렵습니다. 파일이나 .md로 공유해 주세요.', 'err');
+            toast('문서가 너무 커서 링크에 담을 수 없습니다. .md 파일로 내려받아 공유해 주세요.', 'err');
+            announce('문서가 커서 링크로 만들지 못했습니다. .md 파일로 내려받기를 안내했습니다.');
             return;
         }
+        try { history.replaceState(null, '', link.url); } catch (error) { /* ignore */ }
+        await copyText(link.url, '본문을 담은 링크를 복사했습니다. 링크를 만든 시점의 내용이 그대로 열립니다.');
+        announce('본문을 담은 링크를 복사했습니다.');
+    }
+
+    /* the .md download name follows where the document came from */
+    function markdownDownloadName() {
+        const name = String(state.name || '').trim();
+        if (state.origin === 'file' && name) return name;
+        if (state.origin === 'url' && name && /\.(md|markdown|mdown|txt)$/i.test(name)) return name;
+        if (state.origin === 'sample') return SAMPLE_NAME;
+        return 'document.md';
+    }
+
+    function downloadMarkdown() {
+        if (!hasDocument()) { toast('먼저 문서를 열어 주세요. 내려받을 본문이 없습니다.', 'err'); return; }
+        const name = markdownDownloadName();
+        download(name, state.markdown, 'text/markdown;charset=utf-8');
+        toast(`${escapeHtml(name)} 파일을 내려받았습니다.`, 'ok');
+        announce(`${name} 파일을 내려받았습니다.`);
+    }
+
+    function sharePrimary() {
+        if (shareMode() === 'url') return copyUrlShareLink();
+        return downloadMarkdown();
+    }
+
+    /* the split button's icon says what a press does: link for an original link, arrow for a file */
+    function paintShareAffordance() {
+        const primary = $('btnShare');
+        const urlItem = $('miUrl');
+        const contentItem = $('miContent');
+        const downloadItem = $('miDownload');
+        const urlMode = shareMode() === 'url';
+        const ready = hasDocument();
+
+        if (primary) {
+            const linkIcon = primary.querySelector('.share-icon-link');
+            const downloadIcon = primary.querySelector('.share-icon-download');
+            /* SVG elements have no `hidden` IDL property — toggle the attribute itself */
+            if (linkIcon) linkIcon.toggleAttribute('hidden', !urlMode);
+            if (downloadIcon) downloadIcon.toggleAttribute('hidden', urlMode);
+            const label = !ready ? '공유할 문서가 없습니다' : urlMode ? '원본 링크 복사' : '.md 파일로 내려받기';
+            primary.setAttribute('aria-label', label);
+            primary.title = !ready
+                ? '공유할 문서가 없습니다'
+                : urlMode
+                    ? '원본 링크 복사 — 이 문서의 원본 주소를 ?url= 링크로 복사합니다'
+                    : '.md 파일로 내려받기 — 지금 문서를 마크다운 파일로 저장합니다';
+            primary.disabled = !ready;
+        }
+        if (urlItem) {
+            const urlReady = ready && urlMode;
+            urlItem.disabled = !urlReady;
+            urlItem.title = urlReady
+                ? '이 문서의 원본 주소를 ?url= 링크로 복사합니다'
+                : 'URL로 연 문서에서만 쓸 수 있습니다';
+            /* the reason also has to read on touch screens, where title never shows */
+            const note = urlItem.querySelector('.menu-note');
+            if (note) note.textContent = urlReady ? '?url=' : 'URL 문서만';
+        }
+        if (contentItem) contentItem.disabled = !ready;
+        if (downloadItem) downloadItem.disabled = !ready;
+    }
+
+    /* the share payload in the address bar never outlives the document it belonged to */
+    function stripShareParams() {
         try {
-            history.replaceState(null, '', link.url);
+            const current = new URL(location.href);
+            const hashMd = /^#md=/.test(location.hash || '');
+            if (!hashMd && !current.searchParams.has('url') && !current.searchParams.has('md')) return;
+            current.searchParams.delete('url');
+            current.searchParams.delete('md');
+            current.hash = '';
+            history.replaceState(null, '', `${current.pathname}${current.search}`);
         } catch (error) { /* ignore */ }
-        await copyText(link.url, '공유 링크를 복사했습니다.');
-        announce('공유 링크를 복사했습니다.');
+    }
+
+    function setShareMenu(open) {
+        const menu = $('shareMenu');
+        const toggle = $('btnShareMenu');
+        if (!menu || !toggle) return;
+        if (open) paintShareAffordance();
+        menu.hidden = !open;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
     }
 
     function readShareParams() {
@@ -1110,11 +1243,10 @@
         }
         if (button && button.disabled) return;
 
-        const label = button ? button.textContent : '';
         if (button) {
             button.disabled = true;
             button.setAttribute('aria-busy', 'true');
-            button.textContent = '만드는 중…';
+            button.classList.add('is-busy');
         }
         try {
             const bundle = await buildZipBundle(state.markdown);
@@ -1142,7 +1274,7 @@
             if (button) {
                 button.disabled = false;
                 button.removeAttribute('aria-busy');
-                button.textContent = label || 'ZIP 저장';
+                button.classList.remove('is-busy');
             }
         }
     }
@@ -1213,6 +1345,8 @@ ${bodyHtml}
         state.markdown = '';
         state.name = '문서 없음';
         state.source = '';
+        state.sourceUrl = '';
+        state.origin = '';
         el.article.innerHTML = '<p class="toc-empty" style="color:var(--text-secondary);font-size:13px">열린 문서가 없습니다. <strong>파일 열기</strong>로 .md를 고르거나, <strong>텍스트 붙여넣기</strong>로 본문을 넣어 주세요.</p>';
         el.docTitle.textContent = '문서 없음';
         el.docEyebrow.textContent = 'MARKDOWN';
@@ -1230,8 +1364,9 @@ ${bodyHtml}
         el.statChars.textContent = '0';
         el.statRead.textContent = '0';
         document.title = 'HD2Lab | Markdown Viewer';
-        try { history.replaceState(null, '', location.pathname); } catch (error) { /* ignore */ }
+        stripShareParams();
         resetPaneScroll();
+        paintShareAffordance();
         toast('문서를 닫았습니다.');
     }
 
@@ -1242,7 +1377,7 @@ ${bodyHtml}
             event.target.value = '';
         });
         $('btnSample').addEventListener('click', () => {
-            renderDocument(SAMPLE, SAMPLE_NAME, '');
+            renderDocument(SAMPLE, SAMPLE_NAME, '', { origin: 'sample' });
             toast('샘플 문서를 열었습니다.', 'ok');
         });
         $('btnPaste').addEventListener('click', () => {
@@ -1253,7 +1388,7 @@ ${bodyHtml}
         $('btnPasteRender').addEventListener('click', () => {
             const text = el.pasteArea.value;
             if (!text.trim()) { toast('붙여넣은 내용이 없습니다.', 'err'); return; }
-            renderDocument(text, 'pasted.md', '');
+            renderDocument(text, 'document.md', '', { origin: 'paste' });
             if (el.pasteDialog.open) el.pasteDialog.close();
             toast('붙여넣은 문서를 읽었습니다.', 'ok');
         });
@@ -1267,7 +1402,26 @@ ${bodyHtml}
         el.urlInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') { event.preventDefault(); loadFromUrl(el.urlInput.value); }
         });
-        $('btnShare').addEventListener('click', shareLink);
+        $('btnShare').addEventListener('click', () => { setShareMenu(false); sharePrimary(); });
+        $('btnShareMenu').addEventListener('click', (event) => {
+            event.stopPropagation();
+            setShareMenu($('shareMenu').hidden);
+        });
+        $('shareMenu').addEventListener('click', (event) => {
+            const item = event.target.closest('[data-share]');
+            if (!item || item.disabled) return;
+            setShareMenu(false);
+            if (item.dataset.share === 'url') copyUrlShareLink();
+            else if (item.dataset.share === 'content') copyContentShareLink();
+            else if (item.dataset.share === 'download') downloadMarkdown();
+        });
+        document.addEventListener('click', (event) => {
+            if (event.target.closest && event.target.closest('.split-btn')) return;
+            setShareMenu(false);
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') setShareMenu(false);
+        });
         $('btnPrint').addEventListener('click', () => window.print());
         $('btnExport').addEventListener('click', exportHtml);
         $('btnExportZip').addEventListener('click', exportZip);
@@ -1288,6 +1442,7 @@ ${bodyHtml}
         el.btnToc.addEventListener('click', () => {
             const open = el.tocPanel.classList.toggle('is-open');
             el.btnToc.setAttribute('aria-expanded', open ? 'true' : 'false');
+            el.btnToc.setAttribute('aria-label', open ? '목차 닫기' : '목차 열기');
             if (open) el.tocNav.scrollTop = 0;
         });
         el.btnTocClose.addEventListener('click', closeTocDrawer);
@@ -1326,7 +1481,7 @@ ${bodyHtml}
         wireEvents();
         const shared = readShareParams();
         if (shared && shared.text) {
-            renderDocument(shared.text, shared.name, shared.source);
+            renderDocument(shared.text, shared.name, shared.source, { origin: 'share' });
             toast('공유 링크의 문서를 복원했습니다.', 'ok');
         } else if (shared && shared.url) {
             el.urlInput.value = shared.url;
@@ -1345,6 +1500,16 @@ ${bodyHtml}
         renderDocument,
         parseFrontmatter,
         buildShareLink,
+        buildUrlShareLink,
+        shareMode,
+        sharePrimary,
+        copyUrlShareLink,
+        copyContentShareLink,
+        downloadMarkdown,
+        markdownDownloadName,
+        paintShareAffordance,
+        stripShareParams,
+        setShareMenu,
         sanitize,
         readFile,
         handleFiles,

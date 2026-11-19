@@ -25,7 +25,7 @@
     <script>try{var h=localStorage.getItem('hd2-theme');document.documentElement.setAttribute('data-theme',h==='dark'?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
     <link rel="stylesheet" href="./assets/hd2-theme.css?v=20261117-navy">
     <script src="./assets/hd2-theme.js?v=20261117-navy" defer></script>
-    <link rel="stylesheet" href="style.css?v=20261118-app">
+    <link rel="stylesheet" href="style.css?v=20261119-share">
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg?v=20261116-softiris">
     <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32.png?v=20261116-softiris">
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png?v=20261116-softiris">
@@ -35,7 +35,7 @@
     <script src="js/vendor/purify.min.js" defer></script>
     <script src="js/vendor/lz-string.min.js" defer></script>
     <script src="js/vendor/jszip.min.js" defer></script>
-    <script src="app.js?v=20261118-app" defer></script>
+    <script src="app.js?v=20261119-share" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#doc">본문으로 건너뛰기</a>
@@ -49,9 +49,11 @@
             </a>
             <div class="header-actions">
                 <button type="button" class="header-icon" id="btnHelp" aria-haspopup="dialog" aria-label="사용 안내 열기" title="사용 안내">
-                    <span aria-hidden="true">?</span>
+                    <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7.3"/><path d="M8.2 8.1a1.9 1.9 0 0 1 3.7.5c0 1.2-1.4 1.5-1.8 2.4-.1.2-.1.4-.1.7"/><path d="M10 14.3h.02"/></svg>
                 </button>
-                <a class="header-link" href="/">Web-HQ <span aria-hidden="true">↗</span></a>
+                <a class="header-icon" href="/" aria-label="HD2Lab Web-HQ로 이동" title="HD2Lab Web-HQ로 이동">
+                    <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.4 8.9L10 3.4l6.6 5.5"/><path d="M4.9 8v7.3c0 .8.7 1.5 1.5 1.5h7.2c.8 0 1.5-.7 1.5-1.5V8"/><path d="M8.2 16.8v-4.3h3.6v4.3"/></svg>
+                </a>
             </div>
         </div>
     </header>
@@ -61,24 +63,54 @@
 
         <section class="viewer" aria-label="Markdown viewer">
             <div class="io-bar">
-                <div class="io-group">
-                    <button type="button" class="button button-primary" id="btnOpenFile" title="문서와 이미지를 함께 열 수 있습니다">파일 열기</button>
+                <div class="io-group" role="group" aria-label="문서 열기">
+                    <button type="button" class="icon-btn" id="btnOpenFile" aria-label="파일 열기" title="파일 열기 — .md 문서와 이미지를 함께 열 수 있습니다">
+                        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 15.3V5.4c0-.7.6-1.2 1.2-1.2h3.2l1.5 1.6h5c.7 0 1.2.5 1.2 1.2v1.3"/><path d="M2.7 15.3l1.8-5.5c.2-.5.7-.9 1.2-.9h10.9c.8 0 1.3.8 1.1 1.5l-1.4 4.5c-.2.6-.8 1-1.4 1H3.8c-.7 0-1.2-.4-1.1-1.1z"/></svg>
+                    </button>
                     <input type="file" id="fileInput" accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain,image/*" multiple hidden>
-                    <button type="button" class="button button-ghost" id="btnPaste">텍스트 붙여넣기</button>
-                    <button type="button" class="button button-ghost" id="btnSample">샘플 문서</button>
+                    <button type="button" class="icon-btn" id="btnPaste" aria-label="텍스트 붙여넣기" title="텍스트 붙여넣기">
+                        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5.3" y="4.2" width="9.4" height="13" rx="1.6"/><path d="M7.8 4.2V3.3c0-.6.5-1.1 1.1-1.1h2.2c.6 0 1.1.5 1.1 1.1v.9"/><path d="M7.9 8.6h4.2M7.9 11.4h4.2M7.9 14.2h2.6"/></svg>
+                    </button>
+                    <button type="button" class="icon-btn" id="btnSample" aria-label="샘플 문서 열기" title="샘플 문서 열기">
+                        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M11.4 2.8H6.4c-.8 0-1.4.6-1.4 1.4v11.6c0 .8.6 1.4 1.4 1.4h7.2c.8 0 1.4-.6 1.4-1.4V6.6z"/><path d="M11.4 2.8v3.8h3.6"/><path d="M7.9 10.2h4.2M7.9 13h4.2"/></svg>
+                    </button>
                 </div>
-                <div class="io-group io-group-end">
-                    <button type="button" class="button button-ghost" id="btnShare">공유 링크 복사</button>
-                    <button type="button" class="button button-ghost" id="btnPrint">인쇄 / PDF</button>
-                    <button type="button" class="button button-ghost" id="btnExport">HTML 저장</button>
-                    <button type="button" class="button button-ghost" id="btnExportZip" title="본문과 이미지를 posts/ · assets/ 구조로 묶어 저장합니다">ZIP 저장</button>
+                <div class="io-group io-group-end" role="group" aria-label="공유와 내보내기">
+                    <div class="split-btn">
+                        <button type="button" class="icon-btn icon-btn-accent" id="btnShare" aria-label="원본 링크 복사" title="원본 링크 복사">
+                            <svg class="share-icon-link" viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8.5 11.5a3 3 0 0 0 4.3 0l2.1-2.1a3 3 0 0 0-4.3-4.3l-.9.9"/><path d="M11.5 8.5a3 3 0 0 0-4.3 0l-2.1 2.1a3 3 0 0 0 4.3 4.3l.9-.9"/></svg>
+                            <svg class="share-icon-download" viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false" hidden><path d="M10 2.9v9.3"/><path d="M6.4 8.7L10 12.3l3.6-3.6"/><path d="M3.7 15.3v1.1c0 .5.4.9.9.9h10.8c.5 0 .9-.4.9-.9v-1.1"/></svg>
+                        </button>
+                        <button type="button" class="icon-btn split-caret" id="btnShareMenu" aria-haspopup="true" aria-expanded="false" aria-controls="shareMenu" aria-label="공유 방법 더 보기" title="공유 방법 더 보기">
+                            <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M5.6 8.2L10 12.6l4.4-4.4"/></svg>
+                        </button>
+                        <ul class="menu" id="shareMenu" role="menu" aria-labelledby="btnShareMenu" hidden>
+                            <li role="none"><button type="button" role="menuitem" id="miUrl" data-share="url"><span>원본 링크 복사</span><span class="menu-note" aria-hidden="true">?url=</span></button></li>
+                            <li role="none"><button type="button" role="menuitem" id="miContent" data-share="content"><span>본문을 링크에 담기</span><span class="menu-note" aria-hidden="true">#md=</span></button></li>
+                            <li role="none"><button type="button" role="menuitem" id="miDownload" data-share="download"><span>.md 파일로 내려받기</span><span class="menu-note" aria-hidden="true">.md</span></button></li>
+                        </ul>
+                    </div>
+                    <button type="button" class="icon-btn" id="btnPrint" aria-label="인쇄 / PDF로 저장" title="인쇄 / PDF로 저장">
+                        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M6.4 7.2V3.4h7.2v3.8"/><rect x="3.1" y="7.2" width="13.8" height="6" rx="1.4"/><path d="M6.4 10.8h7.2v5.8H6.4z"/><path d="M13.3 9.4h.4"/></svg>
+                    </button>
+                    <button type="button" class="icon-btn" id="btnExport" aria-label="HTML 파일로 저장" title="HTML 파일로 저장">
+                        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7.4 6.6L3.8 10l3.6 3.4"/><path d="M12.6 6.6L16.2 10l-3.6 3.4"/><path d="M11.2 4.2L8.8 15.8"/></svg>
+                    </button>
+                    <button type="button" class="icon-btn" id="btnExportZip" aria-label="ZIP 파일로 저장" title="ZIP 파일로 저장 — 본문과 이미지를 posts/ · assets/ 구조로 묶습니다">
+                        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="2.6" y="3.4" width="14.8" height="3.4" rx="1"/><path d="M4.1 6.8v8.4c0 .9.7 1.6 1.6 1.6h8.6c.9 0 1.6-.7 1.6-1.6V6.8"/><path d="M8.2 9.7h3.6"/></svg>
+                    </button>
                 </div>
             </div>
 
             <div class="url-bar">
-                <label class="url-label" for="urlInput">URL</label>
+                <span class="url-label" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="10" cy="10" r="7.2"/><path d="M2.9 10h14.2"/><path d="M10 2.8c1.9 2 2.9 4.5 2.9 7.2S11.9 15.2 10 17.2c-1.9-2-2.9-4.5-2.9-7.2S8.1 4.8 10 2.8z"/></svg>
+                </span>
+                <label class="visually-hidden" for="urlInput">문서 URL</label>
                 <input type="url" id="urlInput" placeholder="https://raw.githubusercontent.com/HyangDan2/diary/main/diary-src/posts/….md" spellcheck="false" autocomplete="off">
-                <button type="button" class="button button-ghost" id="btnLoadUrl">불러오기</button>
+                <button type="button" class="icon-btn" id="btnLoadUrl" aria-label="URL에서 문서 불러오기" title="URL에서 문서 불러오기">
+                    <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M3.6 10h10.8"/><path d="M10.4 5.8L14.6 10l-4.2 4.2"/></svg>
+                </button>
             </div>
 
             <div class="doc-bar">
@@ -93,8 +125,12 @@
                     <span><strong id="statRead">0</strong>분 읽기</span>
                 </div>
                 <div class="doc-actions">
-                    <button type="button" class="button button-ghost to-top" id="btnTop" aria-label="맨 위로" hidden><span class="to-top-label">맨 위로</span> <span aria-hidden="true">↑</span></button>
-                    <button type="button" class="button button-ghost toc-toggle" id="btnToc" aria-expanded="false" aria-controls="tocPanel">목차</button>
+                    <button type="button" class="icon-btn to-top" id="btnTop" aria-label="맨 위로 이동" title="맨 위로 이동" hidden>
+                        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 16.4V4.4"/><path d="M5.6 8.8L10 4.4l4.4 4.4"/></svg>
+                    </button>
+                    <button type="button" class="icon-btn toc-toggle" id="btnToc" aria-expanded="false" aria-controls="tocPanel" aria-label="목차 열기" title="목차 열기/닫기">
+                        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M7.4 5.6h8.4M7.4 10h8.4M7.4 14.4h8.4"/><path d="M4.2 5.6h.02M4.2 10h.02M4.2 14.4h.02"/></svg>
+                    </button>
                 </div>
             </div>
 
@@ -156,7 +192,8 @@
                 <li>파일 열기 · 드래그&amp;드롭</li>
                 <li>GFM · 문법 하이라이팅</li>
                 <li>목차 · 코드 복사</li>
-                <li>인쇄/PDF · 공유 링크</li>
+                <li>인쇄/PDF · .md 내려받기</li>
+                <li>원본 링크 · 본문 링크</li>
                 <li>ZIP · posts/assets</li>
             </ul>
 
@@ -170,8 +207,12 @@
                     <p><strong>ZIP 저장</strong>은 본문을 <code>posts/{slug}-{해시}.md</code>로, 이미지는 <code>assets/{해시}.png</code>처럼 내용 해시를 이름으로 삼아 담습니다. 같은 이미지는 한 번만 저장되고, 본문 경로도 <code>/assets/…</code>로 함께 바뀝니다. 이미지는 붙여넣은 본문·로컬 파일·URL 어디서 왔든 모읍니다.</p>
                 </div>
                 <div>
-                    <span class="mono-note">SHARE · SANITIZE</span>
-                    <p>공유 링크는 문서를 압축해 URL 뒤에 담습니다. 렌더링 결과는 DOMPurify를 거쳐 스크립트가 실행되지 않습니다.</p>
+                    <span class="mono-note">SHARE · ?url= / #md=</span>
+                    <p><strong>원본 링크(?url=)</strong>는 URL로 연 문서에만 붙습니다. 링크를 열 때마다 그 주소의 원문을 다시 가져오므로, 원본이 바뀌면 링크를 연 내용도 바뀝니다. <strong>본문을 링크에 담기(#md=)</strong>는 지금 보고 있는 본문을 압축해 링크 안에 담으므로, 나중에 원본이 바뀌어도 링크를 만든 시점의 내용이 그대로 열립니다. 파일로 열었거나 붙여넣은 문서는 기본 동작이 <strong>.md 파일로 내려받기</strong>입니다.</p>
+                </div>
+                <div>
+                    <span class="mono-note">SANITIZE</span>
+                    <p>렌더링 결과는 DOMPurify를 거쳐 스크립트가 실행되지 않습니다.</p>
                 </div>
             </div>
 
