@@ -712,6 +712,13 @@
         } catch (error) {
             /* the document on screen keeps its own share source — nothing is overwritten on failure */
             toast(`불러오지 못했습니다 (${escapeHtml(error.message)}). 이 사이트가 CORS를 허용하지 않으면 파일로 내려받아 열거나 본문을 붙여넣어 주세요.`, 'err');
+            /* a shared ?url= link that fails before anything is open leaves an empty pane: say so */
+            if (!hasDocument()) {
+                el.article.innerHTML = '<p class="toc-empty">URL 문서를 불러오지 못했습니다. 위 주소를 확인해 다시 불러오거나, 파일로 열거나 본문을 붙여넣어 주세요.</p>';
+                el.docSource.textContent = '';
+                paintShareAffordance();
+                announce('URL 문서를 불러오지 못했습니다.');
+            }
         }
     }
 
