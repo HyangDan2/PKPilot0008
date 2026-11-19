@@ -1,4 +1,4 @@
-# PKPilot0008 — HD2Lab Markdown Viewer
+# PKPilot0008 — HD2Markdown Viewer
 
 Live: <https://hyangdan2.github.io/PKPilot0008/>
 
