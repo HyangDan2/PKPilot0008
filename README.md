@@ -11,7 +11,7 @@ scrolls. A slim 52px header sits on top, then the toolbars (`io-bar`, `url-bar`,
 `.doc-layout` takes every remaining pixel as a two-column grid: the TOC on the left and the
 document on the right, each with its own `overflow-y: auto` scroll area. The document frame runs to
 the viewport edge while the running text keeps a ~960px measure. `app.js` measures scrolling
-against the document pane (TOC jumps, IntersectionObserver root, “맨 위로”), not the window.
+against the document pane (TOC jumps, IntersectionObserver root, the *back to top* button), not the window.
 
 What used to sit above and below the viewer — the intro block and the URL/ZIP/share notes — is in
 the header `?` dialog, so it never pushes the viewer down. `@media print` unpins the shell
@@ -31,7 +31,7 @@ the header `?` dialog, so it never pushes the viewer down. `@media print` unpins
   Relative images (`./a.png`, `assets/b.png`) and root-relative ones (`/diary/assets/c.png`) resolve
   against that raw URL — the repo root for a leading `/` — both in the preview and in the ZIP export.
 - `#md=…` / `?md=…` — share links. The document is compressed with lz-string and encoded for a URL;
-  opening the link restores the same document. `공유 링크 복사` writes the link to the clipboard and
+  opening the link restores the same document. *Copy share link* writes the link to the clipboard and
   updates the address bar with `history.replaceState`.
 
 ## Render
@@ -49,10 +49,10 @@ the header `?` dialog, so it never pushes the viewer down. `@media print` unpins
 
 ## Output
 
-- `인쇄 / PDF` uses `window.print()` with a dedicated `@media print` stylesheet (chrome hidden,
+- *Print / PDF* uses `window.print()` with a dedicated `@media print` stylesheet (chrome hidden,
   the app shell unpinned to `height: auto; overflow: visible`, paper colours, page-break hints).
-- `HTML 저장` exports a standalone HTML file with the rendered document and an embedded stylesheet.
-- `ZIP 저장` builds a site-ready bundle in the browser with JSZip:
+- *Save HTML* exports a standalone HTML file with the rendered document and an embedded stylesheet.
+- *Save ZIP* builds a site-ready bundle in the browser with JSZip:
 
   ```
   posts/{slug}-{hash8}.md     slug from the file name, hash8 = SHA-256 of the exported markdown
@@ -73,6 +73,7 @@ the header `?` dialog, so it never pushes the viewer down. `@media print` unpins
 index.html          the app shell (52px header, toolbars, TOC + document panes, help/paste dialogs)
 style.css           Soft Iris / Navy & Lavender tokens + full-viewport shell, document, TOC, print
 app.js              parsing, rendering, TOC, share links, export, input handling
+assets/             shared hd2-theme.css / hd2-theme.js (44px floating toggle)
 js/vendor/          markdown-it 14.3.3, highlight.js 11.11.1, DOMPurify 3.2.6, lz-string 1.5.0, JSZip 3.10.1
 ```
 
