@@ -1543,3 +1543,82 @@ ${bodyHtml}
         state,
     };
 })();
+
+/* ---------- HD2Lab title bar: theme switch and the ⋮ portal menu ----------
+   Same two controls every current HD2Lab app keeps in its title bar, in the
+   same places: help (?), the light/dark switch, and the ⋮ menu holding the way
+   back to the portal, the app catalog, the sibling app and the source. */
+(function () {
+    'use strict';
+
+    var root = document.documentElement;
+    var themeBtn = document.getElementById('btnTheme');
+    var menuBtn = document.getElementById('btnPortalMenu');
+    var menu = document.getElementById('portalMenu');
+
+    /* --- theme switch (the floating shared toggle is hidden on this page) --- */
+    function isDark() {
+        return root.getAttribute('data-theme') === 'dark';
+    }
+
+    function paintTheme() {
+        if (!themeBtn) return;
+        var dark = isDark();
+        var text = dark ? '라이트 모드로 전환' : '다크 모드로 전환 (네이비 & 라벤더)';
+        themeBtn.setAttribute('aria-pressed', dark ? 'true' : 'false');
+        themeBtn.setAttribute('aria-label', text);
+        themeBtn.setAttribute('title', text);
+    }
+
+    if (themeBtn) {
+        themeBtn.addEventListener('click', function () {
+            if (window.HD2Theme && typeof window.HD2Theme.toggle === 'function') {
+                window.HD2Theme.toggle();
+            } else {
+                var next = isDark() ? 'light' : 'dark';
+                root.setAttribute('data-theme', next);
+                try { window.localStorage.setItem('hd2-theme', next); } catch (error) { /* storage off */ }
+            }
+        });
+        window.addEventListener('hd2-theme-change', paintTheme);
+        paintTheme();
+    }
+
+    /* --- ⋮ menu --- */
+    function setMenu(open) {
+        if (!menu || !menuBtn) return;
+        if (open) menu.removeAttribute('hidden');
+        else menu.setAttribute('hidden', '');
+        menuBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    function menuOpen() {
+        return !!(menu && !menu.hasAttribute('hidden'));
+    }
+
+    if (menuBtn && menu) {
+        menuBtn.addEventListener('click', function (event) {
+            event.stopPropagation();
+            setMenu(!menuOpen());
+        });
+
+        document.addEventListener('pointerdown', function (event) {
+            if (!menuOpen()) return;
+            if (menuBtn.contains(event.target) || menu.contains(event.target)) return;
+            setMenu(false);
+        });
+
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' && menuOpen()) {
+                setMenu(false);
+                menuBtn.focus();
+            }
+        });
+
+        menu.addEventListener('click', function (event) {
+            if (event.target.closest('a')) setMenu(false);
+        });
+
+        window.addEventListener('blur', function () { setMenu(false); });
+    }
+})();
