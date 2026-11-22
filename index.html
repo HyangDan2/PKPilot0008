@@ -1,6 +1,11 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
+  <script>
+    if (window.self !== window.top && new URLSearchParams(location.search).get('embed') === 'launcher') {
+      document.documentElement.dataset.embed = 'launcher';
+    }
+  </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="description" content="HD2Markdown Viewer — .md 파일을 열거나 붙여넣으면 GFM 그대로 읽힙니다. 목차, 코드 복사, 인쇄/PDF, ZIP 내보내기까지 브라우저 안에서.">
@@ -25,7 +30,7 @@
     <script>try{var h=localStorage.getItem('hd2-theme');document.documentElement.setAttribute('data-theme',h==='dark'?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
     <link rel="stylesheet" href="./assets/hd2-theme.css?v=20261117-navy">
     <script src="./assets/hd2-theme.js?v=20261117-navy" defer></script>
-    <link rel="stylesheet" href="style.css?v=20261119-title">
+    <link rel="stylesheet" href="style.css?v=20261122-launcher-embed">
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg?v=20261116-softiris">
     <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32.png?v=20261116-softiris">
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png?v=20261116-softiris">

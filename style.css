@@ -1,3 +1,14 @@
+/* The launcher positions the frame within the device's vertical safe area. */
+:root {
+  --app-safe-area-top: env(safe-area-inset-top, 0px);
+  --app-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+:root[data-embed="launcher"] {
+  --app-safe-area-top: 0px;
+  --app-safe-area-bottom: 0px;
+}
+
 /* ==========================================================================
    HD2Markdown Viewer · PKPilot0008 — full-viewport app shell (100vw × 100dvh)
    Soft Iris (light) / Navy & Lavender (dark)
@@ -89,7 +100,7 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
     z-index: 20;
     flex: none;
     height: var(--header-h);
-    padding-top: env(safe-area-inset-top, 0px);
+    padding-top: var(--app-safe-area-top);
     border-bottom: 1px solid var(--border);
     background: var(--surface);
 }
@@ -207,7 +218,7 @@ header .icon-btn, .header-actions a.header-icon { text-decoration: none; }
 .doc:focus { outline: none; }
 .doc:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 /* the frame runs to the viewport edge; the running text keeps a readable measure */
-.doc-inner { width: 100%; max-width: calc(var(--measure) + 2 * clamp(20px, 3.4vw, 52px)); margin-inline: auto; padding: 30px clamp(20px, 3.4vw, 52px) calc(72px + env(safe-area-inset-bottom, 0px)); }
+.doc-inner { width: 100%; max-width: calc(var(--measure) + 2 * clamp(20px, 3.4vw, 52px)); margin-inline: auto; padding: 30px clamp(20px, 3.4vw, 52px) calc(72px + var(--app-safe-area-bottom)); }
 
 .doc-head { padding-bottom: 22px; margin-bottom: 24px; border-bottom: 1px solid var(--border); }
 .doc-eyebrow { margin: 0; color: var(--accent-text); font-family: var(--mono); font-size: 10px; letter-spacing: .18em; text-transform: uppercase; }
@@ -332,7 +343,7 @@ header .icon-btn, .header-actions a.header-icon { text-decoration: none; }
 .md-dialog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 14px; }
 .dialog-hint { margin-left: auto; color: var(--text-secondary); font-family: var(--mono); font-size: 10px; letter-spacing: .04em; }
 
-.toast { position: fixed; z-index: 70; left: 50%; bottom: max(78px, env(safe-area-inset-bottom, 0px) + 78px); transform: translateX(-50%); max-width: min(92vw, 560px); padding: 11px 17px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 12.5px; line-height: 1.5; text-align: center; box-shadow: var(--shadow); }
+.toast { position: fixed; z-index: 70; left: 50%; bottom: max(78px, var(--app-safe-area-bottom) + 78px); transform: translateX(-50%); max-width: min(92vw, 560px); padding: 11px 17px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--text); font-size: 12.5px; line-height: 1.5; text-align: center; box-shadow: var(--shadow); }
 .toast.is-ok { border-color: var(--ok); }
 .toast.is-warn { border-color: var(--warn); color: var(--warn); }
 .toast.is-err { border-color: var(--danger); color: var(--danger); }
@@ -375,7 +386,7 @@ header .icon-btn, .header-actions a.header-icon { text-decoration: none; }
     .doc-actions { gap: 5px; }
     .doc-actions .icon-btn { width: 30px; height: 30px; }
     .menu { min-width: 218px; }
-    .doc-inner { padding: 20px 15px calc(64px + env(safe-area-inset-bottom, 0px)); }
+    .doc-inner { padding: 20px 15px calc(64px + var(--app-safe-area-bottom)); }
     .doc-title { font-size: clamp(24px, 7vw, 30px); }
     .doc-summary { font-size: 13.5px; }
     .markdown-body { font-size: 15px; line-height: 1.85; }
