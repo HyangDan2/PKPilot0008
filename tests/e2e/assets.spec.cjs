@@ -253,12 +253,51 @@ test('a ?url= document still resolves its relative images against its own addres
     expect(errors).toEqual([]);
 });
 
-test('the io-bar keeps the folder button on screen down to 320px', async ({ page }) => {
+test('icon toolbar stays compact at 390px and 320px, with actions available in menus', async ({ page }) => {
     for (const width of [390, 320]) {
         await page.setViewportSize({ width, height: 780 });
         await page.goto('/');
+        await expect(page.locator('#btnOpenMenu')).toBeVisible();
+        await expect(page.locator('#btnShare')).toBeVisible();
+        await expect(page.locator('#btnExportMenu')).toBeVisible();
+        await expect(page.locator('#urlBar')).toBeHidden();
+
+        await page.locator('#btnOpenMenu').click();
+        await expect(page.locator('#openMenu')).toBeVisible();
         await expect(page.locator('#btnOpenFolder')).toBeVisible();
+        await page.locator('#btnOpenUrl').click();
+        await expect(page.locator('#openMenu')).toBeHidden();
+        await expect(page.locator('#urlBar')).toBeVisible();
+        await page.locator('#btnCloseUrl').click();
+        await expect(page.locator('#urlBar')).toBeHidden();
+
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
         expect(overflow, `horizontal overflow at ${width}px`).toBeLessThanOrEqual(1);
     }
+});
+
+test('share and export icons open distinct menus with no duplicated actions', async ({ page }) => {
+    await page.goto('/');
+    await page.locator('#btnShare').click();
+    await expect(page.locator('#shareMenu')).toBeVisible();
+    await expect(page.locator('#miContent')).toBeVisible();
+    await expect(page.locator('#miUrl')).toBeDisabled();
+
+    await page.locator('#btnExportMenu').click();
+    await expect(page.locator('#shareMenu')).toBeHidden();
+    await expect(page.locator('#exportMenu')).toBeVisible();
+    await expect(page.locator('#miDownload')).toBeVisible();
+    await expect(page.locator('#btnExport')).toBeVisible();
+    await expect(page.locator('#btnExportZip')).toBeVisible();
+    await expect(page.locator('#btnPrint')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#exportMenu')).toBeHidden();
+
+    await page.locator('#btnOpenMenu').focus();
+    await page.keyboard.press('ArrowDown');
+    await expect(page.locator('#openMenu')).toBeVisible();
+    await expect(page.locator('#btnOpenFile')).toBeFocused();
+    await page.keyboard.press('Escape');
+    await expect(page.locator('#openMenu')).toBeHidden();
+    await expect(page.locator('#btnOpenMenu')).toBeFocused();
 });
