@@ -83,6 +83,14 @@
         btnHelp: $('btnHelp'),
         helpDialog: $('helpDialog'),
         fileInput: $('fileInput'),
+        folderInput: $('folderInput'),
+        imageInput: $('imageInput'),
+        assetNotice: $('assetNotice'),
+        assetNoticeTitle: $('assetNoticeTitle'),
+        assetNoticeList: $('assetNoticeList'),
+        btnNoticeFolder: $('btnNoticeFolder'),
+        btnNoticeImages: $('btnNoticeImages'),
+        btnNoticeClose: $('btnNoticeClose'),
         urlInput: $('urlInput'),
         dropHint: $('dropHint'),
         pasteDialog: $('pasteDialog'),
@@ -101,6 +109,13 @@
         observer: null,
         headings: [],
         localImages: new Map(),
+        /* where the document on screen sits inside the folder it came from (posts/doc.md),
+           so ../assets/a.png in it can be resolved against that folder */
+        docPath: '',
+        /* the folder that was opened or dropped: a leading / in an image path starts here */
+        folderRoot: '',
+        /* the notice stays hidden once the reader closes it for this document */
+        assetNoticeDismissedFor: '',
     };
 
     /* the document pane is its own scroll container — every scroll/spy routine
@@ -255,7 +270,9 @@
     }
 
     /* ---------------------------------------------------------------- local images */
-    function normalizePath(value) {
+    /* the path helpers live in js/paths.js so the same code runs under Node in the unit tests */
+    const paths = window.HD2Paths || {};
+    const normalizePath = paths.normalizePath || function (value) {
         let out = String(value == null ? '' : value).trim();
         if (!out) return '';
         try { out = decodeURIComponent(out); } catch (error) { /* keep the raw string */ }
@@ -266,7 +283,16 @@
             .replace(/^\.\//, '')
             .replace(/^\/+/, '')
             .toLowerCase();
-    }
+    };
+    const resolveRelativePath = paths.resolveRelativePath || function () { return ''; };
+    const findInLocalMap = paths.findInLocalMap || function (map, value) {
+        const key = normalizePath(value);
+        return key ? (map.get(key) || null) : null;
+    };
+    const isRemotePath = paths.isRemotePath || function (value) {
+        const raw = String(value == null ? '' : value).trim();
+        return /^[a-z][a-z0-9+.-]*:/i.test(raw) || raw.indexOf('//') === 0;
+    };
 
     const IMAGE_NAME_RE = /\.(png|jpe?g|gif|webp|avif|svg|bmp|ico|tiff?|heic|heif)$/i;
 
@@ -281,18 +307,42 @@
         return /^text\//i.test(file.type || '') && !/^text\/html/i.test(file.type || '');
     }
 
-    /* local files are kept by file name and relative path so the document can find them */
+    /* a local document has no server behind it, so a relative path must never be
+       turned into a URL on the viewer's own host */
+    function isLocalDocument() {
+        return !state.sourceUrl;
+    }
+
+    /* a picked file, or a { file, relative } record from a folder walk */
+    function fileRecord(item) {
+        if (!item) return null;
+        if (item.file && typeof item.file.name === 'string') {
+            return { file: item.file, relative: String(item.relative || item.file.webkitRelativePath || '') };
+        }
+        if (typeof item.name === 'string') {
+            return { file: item, relative: String(item.webkitRelativePath || '') };
+        }
+        return null;
+    }
+
+    function recordRelative(item) {
+        const record = fileRecord(item);
+        return record ? record.relative : '';
+    }
+
+    /* local files are kept by relative path and by file name so the document can find them */
     function rememberLocalImages(files) {
         const added = [];
-        files.forEach((file) => {
-            if (!isImageFile(file)) return;
+        Array.from(files || []).forEach((item) => {
+            const record = fileRecord(item);
+            if (!record || !isImageFile(record.file)) return;
             const entry = {
-                file,
-                name: file.name,
-                relative: file.webkitRelativePath || '',
-                url: URL.createObjectURL(file),
+                file: record.file,
+                name: record.file.name,
+                relative: normalizePath(record.relative),
+                url: URL.createObjectURL(record.file),
             };
-            const keys = [normalizePath(entry.relative), normalizePath(entry.name)].filter(Boolean);
+            const keys = [normalizePath(record.relative), normalizePath(record.file.name)].filter(Boolean);
             if (!keys.length) return;
             keys.forEach((key) => state.localImages.set(key, entry));
             added.push(entry);
@@ -300,20 +350,9 @@
         return added;
     }
 
+    /* the image the open document points at: its own folder first, then any matching path, then the name */
     function findLocalImage(value) {
-        const key = normalizePath(value);
-        if (!key) return null;
-        const direct = state.localImages.get(key);
-        if (direct) return direct;
-        const base = key.split('/').pop();
-        const byBase = state.localImages.get(base);
-        if (byBase) return byBase;
-        let hit = null;
-        state.localImages.forEach((entry, mapKey) => {
-            if (hit) return;
-            if (mapKey.endsWith('/' + key) || key.endsWith('/' + mapKey)) hit = entry;
-        });
-        return hit;
+        return findInLocalMap(state.localImages, value, state.docPath, state.folderRoot);
     }
 
     /* raw.githubusercontent.com/{owner}/{repo}/{branch}/… — the repo root is where a leading /… starts */
@@ -327,6 +366,9 @@
         if (!raw) return '';
         if (/^https?:\/\//i.test(raw)) return raw;
         if (/^\/\//.test(raw)) return `${location.protocol}${raw}`;
+        /* a local file (and pasted or shared text) has no server base: ../assets/a.png must not
+           become https://hyangdan2.github.io/assets/a.png — the image simply is not loaded yet */
+        if (!state.sourceUrl) return '';
         const base = state.sourceUrl || document.baseURI || location.href;
         if (raw.startsWith('/')) {
             const root = rawRepoRoot(state.sourceUrl);
@@ -342,23 +384,82 @@
         const value = String(raw || '').trim();
         if (!value) return '';
         if (/^(?:data:|blob:)/i.test(value)) return value;
+        if (isRemotePath(value)) return absoluteImageUrl(value) || value;
         const local = findLocalImage(value);
         if (local) return local.url;
-        if (/^https?:\/\//i.test(value)) return value;
+        if (isLocalDocument()) return '';
         const absolute = absoluteImageUrl(value);
-        return absolute || value;
+        return absolute || '';
+    }
+
+    /* relative images a local document points at but the opened files do not hold */
+    function missingRelativeImages() {
+        const missing = [];
+        if (!el.article) return missing;
+        el.article.querySelectorAll('img').forEach((image) => {
+            const raw = image.getAttribute('data-origin-src') || image.getAttribute('src');
+            if (!raw) {
+                const pending = image.getAttribute('data-missing-src');
+                if (pending && !missing.includes(pending)) missing.push(pending);
+                return;
+            }
+            if (isRemotePath(raw)) return;
+            if (findLocalImage(raw)) return;
+            if (!missing.includes(raw)) missing.push(raw);
+        });
+        return missing;
+    }
+
+    function assetNoticeKey() {
+        return `${state.docPath}|${state.name}|${state.markdown.length}`;
+    }
+
+    /* the notice above the document says which images it points at and how to bring them in */
+    function paintAssetNotice(missing) {
+        const box = el.assetNotice;
+        if (!box) return;
+        const list = Array.isArray(missing) ? missing : missingRelativeImages();
+        const show = list.length > 0
+            && state.origin === 'file'
+            && isLocalDocument()
+            && state.assetNoticeDismissedFor !== assetNoticeKey();
+        if (!show) {
+            box.hidden = true;
+            box.setAttribute('hidden', '');
+            return;
+        }
+        if (el.assetNoticeTitle) {
+            el.assetNoticeTitle.textContent = `참조하는 이미지 ${list.length}장을 아직 찾지 못했습니다`;
+        }
+        if (el.assetNoticeList) {
+            const shown = list.slice(0, 3).map((value) => `<code>${escapeHtml(value)}</code>`).join(', ');
+            const more = list.length > 3 ? ` 외 ${list.length - 3}장` : '';
+            el.assetNoticeList.innerHTML = `${shown}${more}`;
+        }
+        box.hidden = false;
+        box.removeAttribute('hidden');
     }
 
     function refreshImageSources() {
+        if (!el.article) return [];
         el.article.querySelectorAll('img').forEach((image) => {
-            const raw = image.getAttribute('src');
+            const raw = image.getAttribute('data-origin-src') || image.getAttribute('src') || image.getAttribute('data-missing-src');
             if (!raw) return;
+            image.setAttribute('data-origin-src', raw);
             const next = previewImageSrc(raw);
-            if (next && next !== raw) {
-                image.setAttribute('data-origin-src', raw);
+            if (next) {
                 image.setAttribute('src', next);
+                image.removeAttribute('data-missing-src');
+                image.classList.remove('is-missing-image');
+                return;
             }
+            image.removeAttribute('src');
+            image.setAttribute('data-missing-src', raw);
+            image.classList.add('is-missing-image');
         });
+        const missing = missingRelativeImages();
+        paintAssetNotice(missing);
+        return missing;
     }
 
     /* the HTML file keeps a path that still works where it lands: local names as typed, remote ones absolute */
@@ -385,6 +486,10 @@
         /* the original URL belongs to the document on screen and nothing else:
            only a successful URL load sets it, every other source clears it */
         state.sourceUrl = state.origin === 'url' && /^https?:\/\//i.test(state.source) ? state.source : '';
+        /* the folder path of the document on screen, kept only while that document is */
+        state.docPath = opts.docPath != null ? String(opts.docPath || '') : '';
+        if (state.origin !== 'file') state.folderRoot = '';
+        if (!state.docPath) state.assetNoticeDismissedFor = '';
 
         /* first h1 becomes the document title */
         const firstHeading = el.article.querySelector('h1');
@@ -635,46 +740,118 @@
     }
 
     /* ---------------------------------------------------------------- inputs */
-    function readFile(file) {
+    function readFile(file, relative, note) {
         if (!file) return;
         if (!isMarkdownFile(file)) {
             toast('.md · .markdown · .txt 문서나 이미지 파일을 열어 주세요.', 'err');
             return;
         }
+        const docPath = String(relative || file.webkitRelativePath || file.name || '');
         const reader = new FileReader();
         reader.onload = () => {
-            renderDocument(String(reader.result || ''), file.name, '', { origin: 'file' });
+            renderDocument(String(reader.result || ''), file.name, '', { origin: 'file', docPath });
             announce(`${file.name} 문서를 열었습니다.`);
-            toast(`${file.name} 열기 완료`, 'ok');
+            toast(String(note || `${file.name} 열기 완료`), 'ok');
         };
         reader.onerror = () => toast('파일을 읽지 못했습니다.', 'err');
         reader.readAsText(file, 'utf-8');
     }
 
-    /* the file picker and the drop zone both hand over a FileList: one document plus any images */
-    function handleFiles(fileList) {
-        const files = Array.from(fileList || []);
-        if (!files.length) return;
-        const images = files.filter(isImageFile);
-        const docs = files.filter(isMarkdownFile);
+    function depthOf(relative) {
+        return String(relative || '').split('/').filter(Boolean).length;
+    }
+
+    /* a folder can hold several documents: the shallowest one opens,
+       README/index before the rest, then plain path order */
+    function pickPrimaryDoc(docs) {
+        const list = Array.from(docs || []).filter((doc) => doc && doc.file);
+        if (!list.length) return null;
+        const readmeRank = (entry) => (/(^|\/)(readme|index)\.(md|markdown|mdown|txt)$/i.test(recordRelative(entry)) ? 0 : 1);
+        return list.slice().sort((a, b) => {
+            const depthDiff = depthOf(recordRelative(a)) - depthOf(recordRelative(b));
+            if (depthDiff) return depthDiff;
+            const readmeDiff = readmeRank(a) - readmeRank(b);
+            if (readmeDiff) return readmeDiff;
+            return String(recordRelative(a)).localeCompare(String(recordRelative(b)));
+        })[0];
+    }
+
+    /* every input goes through here: files from the picker, a folder, or a drop */
+    function ingestFiles(input, meta) {
+        const opts = meta || {};
+        const records = Array.from(input || []).map(fileRecord).filter((record) => record && record.file);
+        if (!records.length) return;
+        if (opts.folderRoot != null) state.folderRoot = normalizePath(opts.folderRoot);
+
+        const images = records.filter((record) => isImageFile(record.file));
+        const docs = records.filter((record) => isMarkdownFile(record.file));
         if (images.length) rememberLocalImages(images);
 
         if (docs.length) {
-            readFile(docs[0]);
-            if (images.length) {
-                toast(`이미지 ${images.length}장을 함께 열었습니다. ZIP 저장 시 assets/에 담깁니다.`, 'ok');
-            }
+            const primary = pickPrimaryDoc(docs);
+            const notes = [];
+            if (docs.length > 1) notes.push(`폴더의 문서 ${docs.length}개 가운데 ${recordRelative(primary) || primary.file.name} 문서를 열었습니다.`);
+            if (images.length) notes.push(`이미지 ${images.length}장을 함께 열었습니다. ZIP 저장 시 assets/에 담깁니다.`);
+            readFile(primary.file, recordRelative(primary), notes.length ? notes.join(' ') : undefined);
             return;
         }
         if (images.length) {
-            if (state.markdown && state.markdown.trim()) {
-                renderDocument(state.markdown, state.name, state.source, { origin: state.origin });
-                refreshImageSources();
-            }
+            if (state.markdown && state.markdown.trim()) refreshImageSources();
             toast(`이미지 ${images.length}장을 열었습니다. ZIP 저장 시 assets/에 담깁니다.`, 'ok');
             return;
         }
         toast('.md · .markdown · .txt 문서나 이미지 파일을 열어 주세요.', 'err');
+    }
+
+    /* the file picker and the drop zone both hand over a FileList: one document plus any images */
+    function handleFiles(fileList) {
+        ingestFiles(fileList);
+    }
+
+    /* ---------------------------------------------------------------- folder input */
+    /* a dropped directory is read through the entries API, batch by batch, keeping fullPath */
+    function entryFiles(entry, out) {
+        return new Promise((resolve) => {
+            if (!entry) { resolve(); return; }
+            if (entry.isFile) {
+                entry.file(
+                    (file) => {
+                        out.push({ file, relative: String(entry.fullPath || file.name || '').replace(/^\/+/, '') });
+                        resolve();
+                    },
+                    () => resolve(),
+                );
+                return;
+            }
+            if (!entry.isDirectory) { resolve(); return; }
+            const reader = entry.createReader();
+            const readBatch = () => {
+                /* readEntries hands over at most 100 entries per call, so keep asking */
+                reader.readEntries((entries) => {
+                    if (!entries || !entries.length) { resolve(); return; }
+                    Promise.all(entries.map((child) => entryFiles(child, out))).then(readBatch, readBatch);
+                }, () => resolve());
+            };
+            readBatch();
+        });
+    }
+
+    /* the entries must be taken while the drop event is still being handled */
+    function readDroppedEntries(dataTransfer) {
+        const items = dataTransfer && dataTransfer.items ? Array.from(dataTransfer.items) : [];
+        const handles = items
+            .map((item) => (item && typeof item.webkitGetAsEntry === 'function' ? item.webkitGetAsEntry() : null))
+            .filter(Boolean);
+        if (!handles.length) return Promise.resolve(null);
+        const records = [];
+        const roots = [];
+        return handles.reduce((chain, entry) => chain.then(() => {
+            if (entry.isDirectory) {
+                const root = String(entry.fullPath || '').replace(/^\/+/, '').split('/')[0] || entry.name || '';
+                if (root && !roots.includes(root)) roots.push(root);
+            }
+            return entryFiles(entry, records);
+        }), Promise.resolve()).then(() => ({ records, folderRoot: roots[0] || '' }));
     }
 
     /* github.com/{owner}/{repo}/blob|raw/{branch}/{path} reads through to the raw file */
@@ -698,7 +875,12 @@
             if (!response.ok) throw new Error(`HTTP ${response.status}`);
             const text = await response.text();
             const name = decodeURIComponent((new URL(value).pathname.split('/').pop() || 'remote.md'));
-            renderDocument(text, name, value, { origin: 'url' });
+            const root = rawRepoRoot(value);
+            let docPath = '';
+            if (root) {
+                try { docPath = decodeURIComponent(value.slice(root.length)); } catch (error) { docPath = value.slice(root.length); }
+            }
+            renderDocument(text, name, value, { origin: 'url', docPath });
             el.urlInput.value = value;
             /* an address bar that already carried ?url= follows the document now open */
             try {
@@ -1289,19 +1471,61 @@
     }
 
     /* ---------------------------------------------------------------- export */
-    function exportHtml() {
-        const clone = el.article.cloneNode(true);
-        clone.querySelectorAll('.md-code-head').forEach((node) => node.remove());
-        clone.querySelectorAll('img').forEach((image) => {
-            const raw = image.getAttribute('data-origin-src');
-            if (!raw) return;
-            image.setAttribute('src', htmlExportSrc(raw));
-            image.removeAttribute('data-origin-src');
-        });
-        const title = el.docTitle.textContent || APP_NAME;
-        const html = standalone(title, clone.innerHTML);
-        download(`${slug(title) || 'document'}.html`, html, 'text/html;charset=utf-8');
-        toast('HTML 파일을 내려받았습니다.', 'ok');
+    function bytesToBase64(bytes) {
+        let binary = '';
+        const chunk = 0x8000;
+        for (let i = 0; i < bytes.length; i += chunk) {
+            binary += String.fromCharCode.apply(null, Array.prototype.slice.call(bytes, i, i + chunk));
+        }
+        return window.btoa(binary);
+    }
+
+    function mimeFromName(name, fallback) {
+        const ext = extensionFromName(name);
+        const hit = Object.keys(MIME_EXT).find((mime) => MIME_EXT[mime] === ext);
+        return hit || fallback || 'application/octet-stream';
+    }
+
+    /* a local image goes into the saved HTML itself, so the file stays whole wherever it lands */
+    async function dataUrlFromFile(file) {
+        if (!file) return '';
+        const bytes = await bytesFrom(file);
+        if (!bytes || !bytes.length) return '';
+        return `data:${mimeFromName(file.name, file.type)};base64,${bytesToBase64(bytes)}`;
+    }
+
+    async function exportHtml() {
+        const button = $('btnExport');
+        if (!hasDocument()) { toast('먼저 문서를 열어 주세요. 저장할 본문이 없습니다.', 'err'); return; }
+        if (button && button.disabled) return;
+        if (button) { button.disabled = true; button.classList.add('is-busy'); }
+        try {
+            const clone = el.article.cloneNode(true);
+            clone.querySelectorAll('.md-code-head').forEach((node) => node.remove());
+            const images = Array.from(clone.querySelectorAll('img'));
+            for (let i = 0; i < images.length; i += 1) {
+                const image = images[i];
+                const raw = image.getAttribute('data-origin-src') || image.getAttribute('src') || image.getAttribute('data-missing-src');
+                image.removeAttribute('data-origin-src');
+                image.removeAttribute('data-missing-src');
+                image.classList.remove('is-missing-image');
+                if (!raw) { image.remove(); continue; }
+                let next = '';
+                const local = findLocalImage(raw);
+                if (local) {
+                    try { next = await dataUrlFromFile(local.file); } catch (error) { next = ''; }
+                }
+                image.setAttribute('src', next || htmlExportSrc(raw) || raw);
+            }
+            const title = el.docTitle.textContent || APP_NAME;
+            const html = standalone(title, clone.innerHTML);
+            download(`${slug(title) || 'document'}.html`, html, 'text/html;charset=utf-8');
+            toast('HTML 파일을 내려받았습니다.', 'ok');
+        } catch (error) {
+            toast(`HTML 파일을 만들지 못했습니다 (${escapeHtml(error && error.message ? error.message : '알 수 없는 오류')}). 잠시 뒤 다시 시도해 주세요.`, 'err');
+        } finally {
+            if (button) { button.disabled = false; button.classList.remove('is-busy'); }
+        }
     }
 
     function standalone(title, bodyHtml) {
@@ -1356,6 +1580,9 @@ ${bodyHtml}
         state.source = '';
         state.sourceUrl = '';
         state.origin = '';
+        state.docPath = '';
+        state.folderRoot = '';
+        state.assetNoticeDismissedFor = '';
         el.article.innerHTML = '<p class="toc-empty" style="color:var(--text-secondary);font-size:13px">열린 문서가 없습니다. <strong>파일 열기</strong>로 .md를 고르거나, <strong>텍스트 붙여넣기</strong>로 본문을 넣어 주세요.</p>';
         el.docTitle.textContent = '문서 없음';
         el.docEyebrow.textContent = 'MARKDOWN';
@@ -1376,15 +1603,39 @@ ${bodyHtml}
         stripShareParams();
         resetPaneScroll();
         paintShareAffordance();
+        paintAssetNotice([]);
         toast('문서를 닫았습니다.');
     }
 
     function wireEvents() {
         $('btnOpenFile').addEventListener('click', () => el.fileInput.click());
         el.fileInput.addEventListener('change', (event) => {
-            handleFiles(event.target.files);
+            ingestFiles(event.target.files, { folderRoot: '' });
             event.target.value = '';
         });
+        if ($('btnOpenFolder')) $('btnOpenFolder').addEventListener('click', () => el.folderInput.click());
+        if (el.folderInput) {
+            el.folderInput.addEventListener('change', (event) => {
+                const files = Array.from(event.target.files || []);
+                const root = files.length ? String(files[0].webkitRelativePath || '').split('/')[0] : '';
+                ingestFiles(files, { folderRoot: root });
+                event.target.value = '';
+            });
+        }
+        if (el.imageInput) {
+            el.imageInput.addEventListener('change', (event) => {
+                ingestFiles(event.target.files);
+                event.target.value = '';
+            });
+        }
+        if (el.btnNoticeFolder) el.btnNoticeFolder.addEventListener('click', () => el.folderInput.click());
+        if (el.btnNoticeImages) el.btnNoticeImages.addEventListener('click', () => el.imageInput.click());
+        if (el.btnNoticeClose) {
+            el.btnNoticeClose.addEventListener('click', () => {
+                state.assetNoticeDismissedFor = assetNoticeKey();
+                if (el.assetNotice) el.assetNotice.hidden = true;
+            });
+        }
         $('btnSample').addEventListener('click', () => {
             renderDocument(SAMPLE, SAMPLE_NAME, '', { origin: 'sample' });
             toast('샘플 문서를 열었습니다.', 'ok');
@@ -1478,7 +1729,18 @@ ${bodyHtml}
             event.preventDefault();
             depth = 0;
             el.dropHint.hidden = true;
-            handleFiles(event.dataTransfer.files);
+            /* entries are read while the event is live, then walked recursively;
+               the plain file list is taken now too, in case the walk finds nothing */
+            const plainFiles = Array.from(event.dataTransfer.files || []);
+            let dropped = null;
+            try { dropped = readDroppedEntries(event.dataTransfer); } catch (error) { dropped = null; }
+            Promise.resolve(dropped).then((result) => {
+                if (result && result.records && result.records.length) {
+                    ingestFiles(result.records, { folderRoot: result.folderRoot });
+                    return;
+                }
+                handleFiles(plainFiles);
+            }).catch(() => handleFiles(plainFiles));
         });
     }
 
@@ -1522,6 +1784,10 @@ ${bodyHtml}
         sanitize,
         readFile,
         handleFiles,
+        ingestFiles,
+        pickPrimaryDoc,
+        readDroppedEntries,
+        entryFiles,
         loadFromUrl,
         clearDocument,
         exportZip,
@@ -1534,9 +1800,17 @@ ${bodyHtml}
         toHex,
         normalizeDocumentUrl,
         normalizePath,
+        resolveRelativePath,
+        isLocalDocument,
+        missingRelativeImages,
+        paintAssetNotice,
+        refreshImageSources,
         rememberLocalImages,
         findLocalImage,
         previewImageSrc,
+        absoluteImageUrl,
+        exportHtml,
+        dataUrlFromFile,
         documentSlug,
         scrollToHeading,
         resetPaneScroll,

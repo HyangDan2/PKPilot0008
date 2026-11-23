@@ -25,6 +25,19 @@ header `?` dialog, so it never pushes the viewer down. `@media print` unpins the
   `multiple` and also takes images, so a document and the images it uses can be opened in one go:
   the files stay in memory by file name / relative path, preview them in place (`blob:`), and ride
   along into the ZIP export.
+- **Folder open** (`폴더 열기`, `<input type="file" webkitdirectory multiple hidden>`), and dropping a
+  folder anywhere on the page. A dropped directory is walked recursively through
+  `DataTransferItem.webkitGetAsEntry()` → `createReader()` in 100-entry batches, so `posts/*.md` and
+  `assets/`, `images/` come in together and keep their path (`webkitRelativePath` / `entry.fullPath`).
+  When a folder holds several documents the shallowest opens (README/index before the rest, then path
+  order) and the toast says how many were found.
+- **Relative images follow the document.** `../assets/a.png` inside `posts/doc.md` resolves against
+  that document's folder (`js/paths.js` · `resolveRelativePath`), a leading `/assets/a.png` against the
+  opened folder root (the repo root for a URL document), and matching prefers the exact path over any
+  suffix and the bare file name. A local document is never given a host URL for a relative path, so
+  `../assets/a.png` can no longer turn into `https://hyangdan2.github.io/assets/a.png`.
+- When a local document points at images that are not open yet, a notice above the document lists them
+  and offers **폴더 열기** / **이미지 추가**; it disappears on its own once every image resolves.
 - Paste text into the paste dialog (also `Ctrl/⌘ + Enter` to render).
 - `?url=https://…` — fetches the file and renders it. When the host does not send CORS headers the
   page explains the failure instead of silently doing nothing. A GitHub page URL
@@ -72,6 +85,8 @@ large for a link. No backend and no URL shortener is involved.
 - *Print / PDF* uses `window.print()` with a dedicated `@media print` stylesheet (chrome hidden,
   the app shell unpinned to `height: auto; overflow: visible`, paper colours, page-break hints).
 - *Save HTML* exports a standalone HTML file with the rendered document and an embedded stylesheet.
+  Local images (`../assets/a.png` included) are written into the file as `data:` URLs, so the saved
+  page keeps its pictures wherever it lands; images that were never found keep their original path.
 - *Save ZIP* builds a site-ready bundle in the browser with JSZip:
 
   ```
@@ -92,10 +107,22 @@ large for a link. No backend and no URL shortener is involved.
 ```
 index.html          the app shell (52px header, icon toolbars, TOC + document panes, help/paste dialogs)
 style.css           Soft Iris / Navy & Lavender tokens + full-viewport shell, document, TOC, print
-app.js              parsing, rendering, TOC, share links, export, input handling
+app.js              parsing, rendering, TOC, share links, export, input handling, folder walk
+js/paths.js         path helpers (normalize / resolve ../ / local-image lookup) shared with the unit tests
 assets/             shared hd2-theme.css / hd2-theme.js (44px floating toggle)
 js/vendor/          markdown-it 14.3.3, highlight.js 11.11.1, DOMPurify 3.2.6, lz-string 1.5.0, JSZip 3.10.1
-tests/fixtures/     relative-doc.md + img/dot.png — the ?url= relative-image check document
+tests/unit/         node --test over js/paths.js (no dependencies)
+tests/e2e/          Playwright specs — folder open/drop, ../ paths, missing-image notice, exports
+tests/fixtures/     relative-doc.md + img/dot.png, folder/ (posts/doc.md + assets/ + images/)
+```
+
+## Test
+
+```bash
+npm install          # @playwright/test only
+export PW_CHROMIUM=/path/to/chrome   # optional: use a browser outside Playwright's cache
+npm test             # unit: js/paths.js under node --test
+npm run test:e2e     # Playwright: serves the repo with tests/serve.cjs on :8123
 ```
 
 Theme is the shared one: `./assets/hd2-theme.css` + `./assets/hd2-theme.js` (44px floating toggle).

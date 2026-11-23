@@ -263,6 +263,22 @@ header .icon-btn, .header-actions a.header-icon { text-decoration: none; }
 .frontmatter-card dd { margin: 0; color: var(--text-body); word-break: break-word; }
 .doc-end { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 42px; padding-top: 18px; border-top: 1px solid var(--border); }
 
+/* missing relative images — a quiet line above the document, not a popup */
+.asset-notice { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 18px; margin: 0 0 22px; padding: 13px 15px; border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; background: var(--accent-soft); }
+.asset-notice[hidden] { display: none; }
+.asset-notice-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 260px; }
+.asset-notice-text strong { color: var(--text); font-size: 13px; letter-spacing: -.01em; }
+.asset-notice-list { color: var(--text-body); font-size: 12px; line-height: 1.7; word-break: break-word; }
+.asset-notice-list code { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--accent-text); font-family: var(--mono); font-size: 11px; }
+.asset-notice-hint { color: var(--text-secondary); font-size: 11.5px; }
+.asset-notice-hint code { font-family: var(--mono); font-size: 11px; }
+.asset-notice-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.asset-notice-actions .button { min-height: 31px; padding: 5px 11px; font-size: 12px; }
+.asset-notice-close { width: 27px; height: 27px; padding: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-secondary); font-size: 12px; line-height: 1; }
+.asset-notice-close:hover { border-color: var(--border); color: var(--text); background: var(--surface); }
+.markdown-body img.is-missing-image { display: none; }
+@media print { .asset-notice { display: none; } }
+
 /* ---------- markdown ---------- */
 .markdown-body { max-width: var(--measure); color: var(--text-body); font-size: 16px; line-height: 1.95; overflow-wrap: break-word; }
 .markdown-body > *:first-child { margin-top: 0; }
