@@ -276,15 +276,14 @@ test('icon toolbar stays compact at 390px and 320px, with actions available in m
     }
 });
 
-test('share and export icons open distinct menus with no duplicated actions', async ({ page }) => {
+test('share icon only offers original URL and export actions remain separate', async ({ page }) => {
     await page.goto('/');
-    await page.locator('#btnShare').click();
-    await expect(page.locator('#shareMenu')).toBeVisible();
-    await expect(page.locator('#miContent')).toBeVisible();
-    await expect(page.locator('#miUrl')).toBeDisabled();
+    await expect(page.locator('#btnShare')).toBeDisabled();
+    await expect(page.locator('#shareMenu')).toHaveCount(0);
+    await expect(page.locator('#miContent')).toHaveCount(0);
+    await expect(page.locator('script[src*="lz-string"]')).toHaveCount(0);
 
     await page.locator('#btnExportMenu').click();
-    await expect(page.locator('#shareMenu')).toBeHidden();
     await expect(page.locator('#exportMenu')).toBeVisible();
     await expect(page.locator('#miDownload')).toBeVisible();
     await expect(page.locator('#btnExport')).toBeVisible();
@@ -300,4 +299,20 @@ test('share and export icons open distinct menus with no duplicated actions', as
     await page.keyboard.press('Escape');
     await expect(page.locator('#openMenu')).toBeHidden();
     await expect(page.locator('#btnOpenMenu')).toBeFocused();
+});
+
+test('share URLs only reference their original source; legacy inline content links are rejected', async ({ page }) => {
+    await page.goto('/?md=non-empty-legacy-data');
+    await expect(page.locator('#docTitle')).toHaveText('HD2Markdown Viewer');
+    await expect.poll(() => new URL(page.url()).searchParams.has('md')).toBe(false);
+    await expect(page.locator('#btnShare')).toBeDisabled();
+
+    const source = 'http://127.0.0.1:8123/tests/fixtures/relative-doc.md';
+    await page.goto('/?url=' + encodeURIComponent(source));
+    await expect(page.locator('#fileName')).toHaveText('relative-doc.md');
+    await expect(page.locator('#btnShare')).toBeEnabled();
+    const result = await page.evaluate(() => window.HD2Viewer.buildUrlShareLink());
+    expect(new URL(result.url).searchParams.get('url')).toBe(source);
+    expect(new URL(result.url).hash).toBe('');
+    expect(result.url).not.toContain('#md=');
 });
