@@ -7,17 +7,18 @@ A read-only Markdown viewer that runs entirely in the browser. No backend, no bu
 ## Layout
 
 The page is an app shell pinned to the viewport — `100vw × 100dvh`, the window itself never
-scrolls. A slim 52px header sits on top, then the toolbars (`io-bar`, `url-bar`, `doc-bar`), and
+scrolls. A slim 52px header sits on top, then the compact icon-only `io-bar` and the `doc-bar`. The
+`url-bar` appears only after choosing URL input from the open menu, and
 `.doc-layout` takes every remaining pixel as a two-column grid: the TOC on the left and the
 document on the right, each with its own `overflow-y: auto` scroll area. The document frame runs to
 the viewport edge while the running text keeps a ~960px measure. `app.js` measures scrolling
 against the document pane (TOC jumps, IntersectionObserver root, the *back to top* button), not the window.
 
-The top bars carry icons only — every control in the header, io-bar, url-bar and doc-bar is an SVG
-button with an `aria-label` and a `title` tooltip, so the chrome holds one row down to 320px. What
-used to sit above and below the viewer — the intro block and the URL/ZIP/share notes — is in the
-header `?` dialog, so it never pushes the viewer down. `@media print` unpins the shell
-(`height: auto; overflow: visible`) so the whole document prints or saves as PDF.
+The main toolbar shows just three SVG icons: open (folder), share (three connected dots), and
+export (download). Each icon opens an accessible named menu. File/folder/URL/paste/sample live under
+open; original/content links under share; Markdown/HTML/ZIP/PDF under export. The URL field is
+contextual and hidden by default, including on mobile. Header help/theme/portal actions remain.
+`@media print` unpins the shell (`height: auto; overflow: visible`) so the full document prints.
 
 ## Input
 
@@ -49,23 +50,17 @@ header `?` dialog, so it never pushes the viewer down. `@media print` unpins the
   URL; opening the link restores the same document. Kept for documents that have no address of their
 own (local files, pasted text) and for pinning a snapshot of what the page showed.
 
-## Share
+## Share and export
 
-The share control is a split button in the io-bar: the icon on the left says what a press does, the
-caret opens the named actions (`원본 링크 복사`, `본문을 링크에 담기`, `.md 파일로 내려받기`).
+- **Open icon (folder):** choose a local file, a whole folder with images, a URL (reveals the URL input),
+  pasted Markdown, or the sample document. The original drag-and-drop import remains available.
+- **Share icon:** choose `원본 링크 복사` for a document loaded from URL (`?url=`), or
+  `본문을 링크에 담기` to copy a compressed snapshot (`#md=`, 12,000-character cap).
+- **Export icon (download):** choose Markdown (`.md`), standalone HTML, image-inclusive ZIP,
+  or Print/PDF. Local Markdown files retain their original download filename.
 
-| document came from | default press | what it gives |
-| --- | --- | --- |
-| `?url=` / URL bar | copy the original link | `?url=<encoded original URL>` — the viewer address reassembled with `URL` + `URLSearchParams`; opening it fetches the original again, so the link follows the source |
-| local file | `.md` download | the markdown body as UTF-8, named after the file that was opened |
-| pasted text | `.md` download | `document.md` |
-| `#md=` / `?md=` link | `.md` download | `document.md` — a share link has no file name of its own |
-
-The original URL lives only while the document that came from it is on screen: a successful URL load
-sets it, and opening a file, pasting, opening a share link or closing the document clears it (a failed
-URL load leaves the document and its source untouched). `본문을 링크에 담기` keeps the old `#md=`
-behaviour, including the 12,000-character cap, and points at the `.md` download when a document is too
-large for a link. No backend and no URL shortener is involved.
+The source URL is scoped to the current document and cleared when a new local, pasted, or shared
+document takes its place. There is no backend or URL shortener.
 
 ## Render
 
