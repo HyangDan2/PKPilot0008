@@ -330,21 +330,33 @@
         return record ? record.relative : '';
     }
 
-    /* local files are kept by relative path and by file name so the document can find them */
+    /* Keep folder-relative paths exact; only individually added images get
+       a bare filename key. Revoke blob URLs when an image is replaced. */
+    function clearLocalImages() {
+        const urls = new Set();
+        state.localImages.forEach((item) => {
+            if (item && item.url) urls.add(item.url);
+        });
+        urls.forEach((url) => URL.revokeObjectURL(url));
+        state.localImages.clear();
+    }
+
     function rememberLocalImages(files) {
         const added = [];
         Array.from(files || []).forEach((item) => {
             const record = fileRecord(item);
             if (!record || !isImageFile(record.file)) return;
+            const key = normalizePath(record.relative || record.file.name);
+            if (!key) return;
+            const previous = state.localImages.get(key);
+            if (previous && previous.url) URL.revokeObjectURL(previous.url);
             const entry = {
                 file: record.file,
                 name: record.file.name,
                 relative: normalizePath(record.relative),
                 url: URL.createObjectURL(record.file),
             };
-            const keys = [normalizePath(record.relative), normalizePath(record.file.name)].filter(Boolean);
-            if (!keys.length) return;
-            keys.forEach((key) => state.localImages.set(key, entry));
+            state.localImages.set(key, entry);
             added.push(entry);
         });
         return added;
@@ -483,6 +495,7 @@
         state.name = name || SAMPLE_NAME;
         state.source = source || '';
         state.origin = opts.origin || (/^https?:\/\//i.test(state.source) ? 'url' : 'other');
+        if (state.origin !== 'file') clearLocalImages();
         /* the original URL belongs to the document on screen and nothing else:
            only a successful URL load sets it, every other source clears it */
         state.sourceUrl = state.origin === 'url' && /^https?:\/\//i.test(state.source) ? state.source : '';
@@ -785,6 +798,7 @@
 
         const images = records.filter((record) => isImageFile(record.file));
         const docs = records.filter((record) => isMarkdownFile(record.file));
+        if (docs.length) clearLocalImages();
         if (images.length) rememberLocalImages(images);
 
         if (docs.length) {
@@ -1583,6 +1597,7 @@ ${bodyHtml}
         state.docPath = '';
         state.folderRoot = '';
         state.assetNoticeDismissedFor = '';
+        clearLocalImages();
         el.article.innerHTML = '<p class="toc-empty" style="color:var(--text-secondary);font-size:13px">열린 문서가 없습니다. <strong>파일 열기</strong>로 .md를 고르거나, <strong>텍스트 붙여넣기</strong>로 본문을 넣어 주세요.</p>';
         el.docTitle.textContent = '문서 없음';
         el.docEyebrow.textContent = 'MARKDOWN';
