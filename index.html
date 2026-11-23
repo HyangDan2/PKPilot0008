@@ -30,7 +30,7 @@
     <script>try{var h=localStorage.getItem('hd2-theme');document.documentElement.setAttribute('data-theme',h==='dark'?'dark':'light');}catch(e){document.documentElement.setAttribute('data-theme','light');}</script>
     <link rel="stylesheet" href="./assets/hd2-theme.css?v=20261117-navy">
     <script src="./assets/hd2-theme.js?v=20261117-navy" defer></script>
-    <link rel="stylesheet" href="style.css?v=20261122-titlebar">
+    <link rel="stylesheet" href="style.css?v=20261123-assets">
     <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg?v=20261116-softiris">
     <link rel="icon" type="image/png" sizes="32x32" href="./assets/favicon-32x32.png?v=20261116-softiris">
     <link rel="apple-touch-icon" sizes="180x180" href="./assets/apple-touch-icon.png?v=20261116-softiris">
@@ -40,7 +40,8 @@
     <script src="js/vendor/purify.min.js" defer></script>
     <script src="js/vendor/lz-string.min.js" defer></script>
     <script src="js/vendor/jszip.min.js" defer></script>
-    <script src="app.js?v=20261122-titlebar" defer></script>
+    <script src="js/paths.js?v=20261123-assets" defer></script>
+    <script src="app.js?v=20261123-assets" defer></script>
 </head>
 <body>
     <a class="skip-link" href="#doc">본문으로 건너뛰기</a>
@@ -103,7 +104,12 @@
                     <button type="button" class="icon-btn" id="btnOpenFile" aria-label="파일 열기" title="파일 열기 — .md 문서와 이미지를 함께 열 수 있습니다">
                         <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 15.3V5.4c0-.7.6-1.2 1.2-1.2h3.2l1.5 1.6h5c.7 0 1.2.5 1.2 1.2v1.3"/><path d="M2.7 15.3l1.8-5.5c.2-.5.7-.9 1.2-.9h10.9c.8 0 1.3.8 1.1 1.5l-1.4 4.5c-.2.6-.8 1-1.4 1H3.8c-.7 0-1.2-.4-1.1-1.1z"/></svg>
                     </button>
+                    <button type="button" class="icon-btn" id="btnOpenFolder" aria-label="폴더 열기" title="폴더 열기 — 상위 폴더의 .md 문서와 assets/ 이미지를 한 번에 불러옵니다">
+                        <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2.6 6.2c0-.7.6-1.2 1.2-1.2h3.1l1.4 1.6h6.9c.7 0 1.2.5 1.2 1.2v8c0 .7-.5 1.2-1.2 1.2H3.8c-.7 0-1.2-.5-1.2-1.2z"/><path d="M10 9.4v4.2"/><path d="M7.9 11.5 10 13.6l2.1-2.1"/></svg>
+                    </button>
                     <input type="file" id="fileInput" accept=".md,.markdown,.mdown,.txt,text/markdown,text/plain,image/*" multiple hidden>
+                    <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+                    <input type="file" id="imageInput" accept="image/*" multiple hidden>
                     <button type="button" class="icon-btn" id="btnPaste" aria-label="텍스트 붙여넣기" title="텍스트 붙여넣기">
                         <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5.3" y="4.2" width="9.4" height="13" rx="1.6"/><path d="M7.8 4.2V3.3c0-.6.5-1.1 1.1-1.1h2.2c.6 0 1.1.5 1.1 1.1v.9"/><path d="M7.9 8.6h4.2M7.9 11.4h4.2M7.9 14.2h2.6"/></svg>
                     </button>
@@ -189,6 +195,18 @@
                             <p class="doc-summary" id="docSummary" hidden></p>
                             <div class="doc-tags" id="docTags"></div>
                         </header>
+                        <div class="asset-notice" id="assetNotice" role="status" hidden>
+                            <div class="asset-notice-text">
+                                <strong id="assetNoticeTitle">참조하는 이미지를 아직 찾지 못했습니다</strong>
+                                <span class="asset-notice-list" id="assetNoticeList"></span>
+                                <span class="asset-notice-hint">상위 폴더를 열면 <code>../assets/</code> 이미지까지 함께 불러옵니다.</span>
+                            </div>
+                            <div class="asset-notice-actions">
+                                <button type="button" class="button button-primary" id="btnNoticeFolder">폴더 열기</button>
+                                <button type="button" class="button button-ghost" id="btnNoticeImages">이미지 추가</button>
+                                <button type="button" class="asset-notice-close" id="btnNoticeClose" aria-label="안내 닫기" title="안내 닫기">✕</button>
+                            </div>
+                        </div>
                         <details class="frontmatter-card" id="fmCard" hidden>
                             <summary>
                                 <span class="mono-note">FRONTMATTER</span>
@@ -207,8 +225,8 @@
 
             <div class="drop-hint" id="dropHint" hidden>
                 <div class="drop-hint-inner">
-                    <strong>.md 파일과 이미지를 놓으면 바로 읽습니다</strong>
-                    <span>.md · .markdown · .txt · 이미지</span>
+                    <strong>.md 파일과 폴더를 놓으면 바로 읽습니다</strong>
+                    <span>.md · .markdown · .txt · 이미지 · 폴더(assets 포함)</span>
                 </div>
             </div>
         </section>
@@ -225,7 +243,7 @@
             </div>
             <p class="help-lede">.md 파일을 열거나 붙여넣으면 GFM 그대로 읽힙니다. 목차로 넘나들고, 코드는 한 번에 복사하고, 링크 하나로 통째로 공유할 수 있습니다.</p>
             <ul class="head-chips" aria-label="Viewer features">
-                <li>파일 열기 · 드래그&amp;드롭</li>
+                <li>파일 · 폴더 열기 · 드래그&amp;드롭</li>
                 <li>GFM · 문법 하이라이팅</li>
                 <li>목차 · 코드 복사</li>
                 <li>인쇄/PDF · .md 내려받기</li>
@@ -237,6 +255,10 @@
                 <div>
                     <span class="mono-note">URL · CORS</span>
                     <p>다른 사이트의 파일은 그 사이트가 CORS를 허용해야 열립니다. GitHub 원문(raw.githubusercontent.com)은 허용되지만, 일반 블로그·드라이브 링크는 막히는 경우가 많습니다. 그때는 파일을 내려받아 열거나 본문을 붙여넣으면 됩니다.</p>
+                </div>
+                <div>
+                    <span class="mono-note">FOLDER · RELATIVE IMAGES</span>
+                    <p><strong>폴더 열기</strong>로 상위 폴더(예: 프로젝트 루트)를 한 번에 열면 <code>posts/*.md</code>와 <code>assets/</code>, <code>images/</code> 이미지가 함께 들어옵니다. 그러면 본문의 <code>../assets/foo.png</code> 같은 상대 경로가 문서 위치를 기준으로 풀려 그대로 보입니다. 폴더를 끌어다 놓아도 같은 방식으로 읽으며, 폴더에 문서가 여러 개면 가장 위에 있는 문서를 엽니다. 문서만 열어 이미지가 비어 있으면 본문 위에 안내가 뜨고, 거기서 <strong>폴더 열기</strong>나 <strong>이미지 추가</strong>로 바로 채울 수 있습니다.</p>
                 </div>
                 <div>
                     <span class="mono-note">ZIP · POSTS/ASSETS</span>
