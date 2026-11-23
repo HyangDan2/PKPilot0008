@@ -51,7 +51,7 @@
         '',
         '## 공유와 인쇄',
         '',
-        '상단 폴더 아이콘은 파일·폴더·URL·붙여넣기 메뉴를 엽니다. 공유 아이콘에는 원본 링크(`?url=`)와 본문을 담는 링크(`#md=`)가 있고, 다운로드 아이콘에서 `.md`·HTML·ZIP·인쇄/PDF 형식을 고를 수 있습니다.',
+        '상단 폴더 아이콘은 파일·폴더·URL·붙여넣기 메뉴를 엽니다. 공유 아이콘은 URL로 연 문서의 원본 주소만 복사합니다. 다운로드 아이콘에서 `.md`·HTML·ZIP·인쇄/PDF 형식을 고를 수 있습니다.',
         '',
         '---',
         '',
@@ -698,7 +698,7 @@
             link.dataset.level = String(item.level);
             link.dataset.target = item.id;
             link.textContent = item.text;
-            /* the pane scrolls, not the window: jump by hand so the URL (#md= share
+            /* the pane scrolls, not the window: jump by hand so the URL (original source link)
                links) is left alone and the mobile drawer closes first */
             link.addEventListener('click', (event) => {
                 event.preventDefault();
@@ -939,20 +939,13 @@
         return { url: url.href, target, kind: 'url', length: target.length };
     }
 
-    /* #md= — the body itself, compressed (kept for documents that have no address of their own) */
-    function buildShareLink() {
-        if (!window.LZString) return null;
-        const packed = window.LZString.compressToEncodedURIComponent(state.markdown || '');
-        return { url: `${viewerAddress().href}#md=${packed}`, length: packed.length, kind: 'content' };
-    }
-
     function hasDocument() {
         return !!(state.markdown && state.markdown.trim());
     }
 
-    /* url → the original link is the default; anything else → the .md file is the default */
+    /* Only a document loaded from an actual URL can be shared by reference. */
     function shareMode() {
-        return state.origin === 'url' && state.sourceUrl && hasDocument() ? 'url' : 'download';
+        return state.origin === 'url' && state.sourceUrl && hasDocument() ? 'url' : 'none';
     }
 
     async function copyUrlShareLink() {
@@ -963,19 +956,6 @@
         }
         await copyText(link.url, '원본 링크를 복사했습니다. 링크를 열 때마다 그 주소의 원문을 다시 가져옵니다.');
         announce('원본 링크를 복사했습니다.');
-    }
-
-    async function copyContentShareLink() {
-        const link = buildShareLink();
-        if (!link) { toast('공유 링크를 만들 수 없습니다 (압축 라이브러리 없음).', 'err'); return; }
-        if (link.length > 12000) {
-            toast('문서가 너무 커서 링크에 담을 수 없습니다. .md 파일로 내려받아 공유해 주세요.', 'err');
-            announce('문서가 커서 링크로 만들지 못했습니다. .md 파일로 내려받기를 안내했습니다.');
-            return;
-        }
-        try { history.replaceState(null, '', link.url); } catch (error) { /* ignore */ }
-        await copyText(link.url, '본문을 담은 링크를 복사했습니다. 링크를 만든 시점의 내용이 그대로 열립니다.');
-        announce('본문을 담은 링크를 복사했습니다.');
     }
 
     /* the .md download name follows where the document came from */
@@ -996,37 +976,19 @@
     }
 
     function sharePrimary() {
-        if (shareMode() === 'url') return copyUrlShareLink();
-        return downloadMarkdown();
+        return copyUrlShareLink();
     }
 
-    /* the split button's icon says what a press does: link for an original link, arrow for a file */
+    /* One-click share: only copy an existing document source URL. */
     function paintShareAffordance() {
         const primary = $('btnShare');
-        const urlItem = $('miUrl');
-        const contentItem = $('miContent');
-        const downloadItem = $('miDownload');
-        const urlMode = shareMode() === 'url';
-        const ready = hasDocument();
-
-        if (primary) {
-            primary.setAttribute('aria-label', '공유 메뉴');
-            primary.title = '공유';
-            primary.disabled = !ready;
-            if (!ready) setShareMenu(false);
-        }
-        if (urlItem) {
-            const urlReady = ready && urlMode;
-            urlItem.disabled = !urlReady;
-            urlItem.title = urlReady
-                ? '이 문서의 원본 주소를 ?url= 링크로 복사합니다'
-                : 'URL로 연 문서에서만 쓸 수 있습니다';
-            /* the reason also has to read on touch screens, where title never shows */
-            const note = urlItem.querySelector('.menu-note');
-            if (note) note.textContent = urlReady ? '?url=' : 'URL 문서만';
-        }
-        if (contentItem) contentItem.disabled = !ready;
-        if (downloadItem) downloadItem.disabled = !ready;
+        if (!primary) return;
+        const available = shareMode() === 'url';
+        primary.disabled = !available;
+        primary.setAttribute('aria-label', available ? '원본 링크 복사' : '원본 링크 없음');
+        primary.title = available
+            ? '원본 주소만 복사합니다 (문서 본문은 링크에 포함되지 않습니다)'
+            : 'URL로 불러온 문서만 원본 링크를 공유할 수 있습니다';
     }
 
     /* the share payload in the address bar never outlives the document it belonged to */
@@ -1045,7 +1007,6 @@
     function setActionMenu(kind, open) {
         [
             ['open', 'btnOpenMenu', 'openMenu'],
-            ['share', 'btnShare', 'shareMenu'],
             ['export', 'btnExportMenu', 'exportMenu'],
         ].forEach(([name, triggerId, menuId]) => {
             const trigger = $(triggerId);
@@ -1055,10 +1016,6 @@
             menu.hidden = !show;
             trigger.setAttribute('aria-expanded', show ? 'true' : 'false');
         });
-    }
-
-    function setShareMenu(open) {
-        setActionMenu('share', open);
     }
 
     function toggleUrlBar(show) {
@@ -1072,21 +1029,9 @@
     }
 
     function readShareParams() {
-        const hash = location.hash || '';
-        if (hash.startsWith('#md=')) {
-            const packed = hash.slice(4);
-            if (window.LZString) {
-                const text = window.LZString.decompressFromEncodedURIComponent(packed);
-                if (text) return { text, name: 'shared-document.md', source: '공유 링크' };
-            }
-        }
         const params = new URLSearchParams(location.search);
-        if (params.get('md') && window.LZString) {
-            const text = window.LZString.decompressFromEncodedURIComponent(params.get('md'));
-            if (text) return { text, name: 'shared-document.md', source: '공유 링크' };
-        }
-        if (params.get('url')) return { url: params.get('url') };
-        return null;
+        const url = params.get('url');
+        return url ? { url } : null;
     }
 
     /* ---------------------------------------------------------------- sha256 */
@@ -1691,7 +1636,6 @@ ${bodyHtml}
         });
         [
             ['btnOpenMenu', 'openMenu', 'open'],
-            ['btnShare', 'shareMenu', 'share'],
             ['btnExportMenu', 'exportMenu', 'export'],
         ].forEach(([triggerId, menuId, kind]) => {
             const trigger = $(triggerId), menu = $(menuId);
@@ -1729,13 +1673,7 @@ ${bodyHtml}
             toggleUrlBar(false);
             $('btnOpenMenu').focus();
         });
-        $('shareMenu').addEventListener('click', (event) => {
-            const item = event.target.closest('[data-share]');
-            if (!item || item.disabled) return;
-            setActionMenu('', false);
-            if (item.dataset.share === 'url') copyUrlShareLink();
-            else if (item.dataset.share === 'content') copyContentShareLink();
-        });
+        $('btnShare').addEventListener('click', copyUrlShareLink);
         $('exportMenu').addEventListener('click', (event) => {
             const item = event.target.closest('[data-export]');
             if (!item || item.disabled) return;
@@ -1818,14 +1756,14 @@ ${bodyHtml}
         }
         wireEvents();
         const shared = readShareParams();
-        if (shared && shared.text) {
-            renderDocument(shared.text, shared.name, shared.source, { origin: 'share' });
-            toast('공유 링크의 문서를 복원했습니다.', 'ok');
-        } else if (shared && shared.url) {
+        if (shared && shared.url) {
             el.urlInput.value = shared.url;
             loadFromUrl(shared.url);
         } else {
+            const legacyBodyLink = /^#md=/.test(location.hash || '') || new URLSearchParams(location.search).has('md');
+            if (legacyBodyLink) stripShareParams();
             renderDocument(SAMPLE, SAMPLE_NAME, '');
+            if (legacyBodyLink) toast('본문을 URL에 담는 링크는 더 이상 지원하지 않습니다. 원본 파일을 열어 주세요.', 'err');
         }
         el.btnToc.setAttribute('aria-expanded', 'false');
     }
@@ -1837,17 +1775,14 @@ ${bodyHtml}
     window.HD2Viewer = {
         renderDocument,
         parseFrontmatter,
-        buildShareLink,
         buildUrlShareLink,
         shareMode,
         sharePrimary,
         copyUrlShareLink,
-        copyContentShareLink,
         downloadMarkdown,
         markdownDownloadName,
         paintShareAffordance,
         stripShareParams,
-        setShareMenu,
         setActionMenu,
         toggleUrlBar,
         sanitize,
