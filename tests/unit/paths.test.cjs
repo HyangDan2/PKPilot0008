@@ -90,3 +90,24 @@ test('findInLocalMap handles an empty map and empty values', () => {
     assert.equal(paths.findInLocalMap(null, '../a.png', 'doc.md', ''), null);
     assert.equal(paths.findInLocalMap(new Map(), '', 'doc.md', ''), null);
 });
+
+test('folder ../ assets do not fall back to unrelated same-named paths', () => {
+    const map = new Map();
+    const unrelated = { name: 'same.png', relative: 'root/old/assets/same.png' };
+    map.set('root/old/assets/same.png', unrelated);
+    assert.equal(paths.findInLocalMap(map, '../assets/same.png', 'root/posts/doc.md', 'root'), null);
+
+    /* Files chosen with "이미지 추가" have no folder-relative path. */
+    const manuallyAdded = { name: 'same.png', relative: '' };
+    map.set('same.png', manuallyAdded);
+    assert.equal(paths.findInLocalMap(map, '../assets/same.png', 'root/posts/doc.md', 'root'), manuallyAdded);
+});
+
+test('ambiguous folder suffixes are not resolved by iteration order', () => {
+    const map = new Map();
+    const a = { name: 'same.png', relative: 'first/assets/same.png' };
+    const b = { name: 'same.png', relative: 'second/assets/same.png' };
+    map.set(a.relative, a);
+    map.set(b.relative, b);
+    assert.equal(paths.findInLocalMap(map, '../assets/same.png', 'doc.md', ''), null);
+});
