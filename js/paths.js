@@ -74,39 +74,53 @@
         return collapsePath(base ? base + '/' + tail : tail);
     }
 
-    /* look a relative image up in the opened files:
-       exact path first (resolved against the document), then any path ending in it, then the bare name */
+    /* Resolve next to the document first. Folder-based ../ paths must not
+       silently pick a same-named image from an unrelated folder. */
     function findInLocalMap(map, value, docPath, rootPrefix) {
         if (!map || typeof map.get !== 'function') return null;
         var key = normalizePath(value);
-        if (!key) return null;
+        if (!key || isRemotePath(value)) return null;
 
-        /* the path next to the document comes first, so two files with one name do not swap */
         var resolved = resolveRelativePath(docPath || '', value, rootPrefix || '');
         if (resolved) {
-            var byResolved = map.get(resolved);
-            if (byResolved) return byResolved;
+            var exact = map.get(resolved);
+            if (exact) return exact;
         }
         if (key.indexOf('/') >= 0) {
             var direct = map.get(key);
             if (direct) return direct;
         }
 
+        var name = key.split('/').pop();
+
+        /* If the opened folder gives us a definite parent directory, do not
+           fall back to some other folder's assets/. A separately chosen image
+           (stored under its bare name) can still fill the missing reference. */
+        if (rootPrefix && /(^|\/)\.\.(?:\/|$)/.test(String(value).replace(/\\/g, '/'))) {
+            var manuallyAdded = map.get(name);
+            return manuallyAdded && !manuallyAdded.relative ? manuallyAdded : null;
+        }
+
+        /* Loose matching is useful when only a single .md was opened, but
+           only a UNIQUE candidate may be used. */
         var wanted = [resolved, key].filter(Boolean);
         var suffix = null;
+        var ambiguous = false;
         map.forEach(function (entry, mapKey) {
-            if (suffix) return;
             if (typeof mapKey !== 'string' || mapKey.indexOf('/') < 0) return;
             for (var i = 0; i < wanted.length; i += 1) {
                 var want = wanted[i];
-                if (!want) continue;
-                if (mapKey === want || mapKey.slice(-(want.length + 1)) === '/' + want) { suffix = entry; return; }
-                if (want.slice(-(mapKey.length + 1)) === '/' + mapKey) { suffix = entry; return; }
+                if (mapKey === want
+                    || mapKey.slice(-(want.length + 1)) === '/' + want
+                    || want.slice(-(mapKey.length + 1)) === '/' + mapKey) {
+                    if (suffix && suffix !== entry) ambiguous = true;
+                    else suffix = entry;
+                    break;
+                }
             }
         });
+        if (ambiguous) return null;
         if (suffix) return suffix;
-
-        var name = key.split('/').pop();
         return name ? (map.get(name) || null) : null;
     }
 
