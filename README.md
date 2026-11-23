@@ -46,21 +46,17 @@ contextual and hidden by default, including on mobile. Header help/theme/portal 
   `raw.githubusercontent.com` before fetching, so any public repository's markdown opens by URL.
   Relative images (`./a.png`, `assets/b.png`) and root-relative ones (`/diary/assets/c.png`) resolve
   against that raw URL — the repo root for a leading `/` — both in the preview and in the ZIP export.
-- `#md=…` / `?md=…` — content share links. The document is compressed with lz-string and encoded for a
-  URL; opening the link restores the same document. Kept for documents that have no address of their
-own (local files, pasted text) and for pinning a snapshot of what the page showed.
-
 ## Share and export
 
 - **Open icon (folder):** choose a local file, a whole folder with images, a URL (reveals the URL input),
   pasted Markdown, or the sample document. The original drag-and-drop import remains available.
-- **Share icon:** choose `원본 링크 복사` for a document loaded from URL (`?url=`), or
-  `본문을 링크에 담기` to copy a compressed snapshot (`#md=`, 12,000-character cap).
+- **Share icon:** copy the original source address (`?url=`) with one click, only for documents
+  opened from a URL. Local or pasted content cannot be encoded into a link.
 - **Export icon (download):** choose Markdown (`.md`), standalone HTML, image-inclusive ZIP,
   or Print/PDF. Local Markdown files retain their original download filename.
 
 The source URL is scoped to the current document and cleared when a new local, pasted, or shared
-document takes its place. There is no backend or URL shortener.
+document takes its place. There is no backend, URL shortener, or Markdown-in-URL encoding.
 
 ## Render
 
@@ -105,7 +101,7 @@ style.css           Soft Iris / Navy & Lavender tokens + full-viewport shell, do
 app.js              parsing, rendering, TOC, share links, export, input handling, folder walk
 js/paths.js         path helpers (normalize / resolve ../ / local-image lookup) shared with the unit tests
 assets/             shared hd2-theme.css / hd2-theme.js (44px floating toggle)
-js/vendor/          markdown-it 14.3.3, highlight.js 11.11.1, DOMPurify 3.2.6, lz-string 1.5.0, JSZip 3.10.1
+js/vendor/          markdown-it 14.3.3, highlight.js 11.11.1, DOMPurify 3.2.6, JSZip 3.10.1
 tests/unit/         node --test over js/paths.js (no dependencies)
 tests/e2e/          Playwright specs — folder open/drop, ../ paths, missing-image notice, exports
 tests/fixtures/     relative-doc.md + img/dot.png, folder/ (posts/doc.md + assets/ + images/)
