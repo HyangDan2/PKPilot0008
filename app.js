@@ -905,6 +905,7 @@
                     history.replaceState(null, '', `${current.pathname}${current.search}`);
                 }
             } catch (error) { /* ignore */ }
+            toggleUrlBar(false);
             toast(converted ? 'GitHub 원문(raw) 주소로 바꾸어 불러왔습니다.' : 'URL 문서를 열었습니다.', 'ok');
             announce(converted ? 'GitHub 원문 문서를 열었습니다.' : 'URL 문서를 열었습니다.');
         } catch (error) {
@@ -1009,19 +1010,10 @@
         const ready = hasDocument();
 
         if (primary) {
-            const linkIcon = primary.querySelector('.share-icon-link');
-            const downloadIcon = primary.querySelector('.share-icon-download');
-            /* SVG elements have no `hidden` IDL property — toggle the attribute itself */
-            if (linkIcon) linkIcon.toggleAttribute('hidden', !urlMode);
-            if (downloadIcon) downloadIcon.toggleAttribute('hidden', urlMode);
-            const label = !ready ? '공유할 문서가 없습니다' : urlMode ? '원본 링크 복사' : '.md 파일로 내려받기';
-            primary.setAttribute('aria-label', label);
-            primary.title = !ready
-                ? '공유할 문서가 없습니다'
-                : urlMode
-                    ? '원본 링크 복사 — 이 문서의 원본 주소를 ?url= 링크로 복사합니다'
-                    : '.md 파일로 내려받기 — 지금 문서를 마크다운 파일로 저장합니다';
+            primary.setAttribute('aria-label', '공유 메뉴');
+            primary.title = '공유';
             primary.disabled = !ready;
+            if (!ready) setShareMenu(false);
         }
         if (urlItem) {
             const urlReady = ready && urlMode;
@@ -1050,13 +1042,33 @@
         } catch (error) { /* ignore */ }
     }
 
+    function setActionMenu(kind, open) {
+        [
+            ['open', 'btnOpenMenu', 'openMenu'],
+            ['share', 'btnShare', 'shareMenu'],
+            ['export', 'btnExportMenu', 'exportMenu'],
+        ].forEach(([name, triggerId, menuId]) => {
+            const trigger = $(triggerId);
+            const menu = $(menuId);
+            if (!trigger || !menu) return;
+            const show = Boolean(open && name === kind && !trigger.disabled);
+            menu.hidden = !show;
+            trigger.setAttribute('aria-expanded', show ? 'true' : 'false');
+        });
+    }
+
     function setShareMenu(open) {
-        const menu = $('shareMenu');
-        const toggle = $('btnShareMenu');
-        if (!menu || !toggle) return;
-        if (open) paintShareAffordance();
-        menu.hidden = !open;
-        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        setActionMenu('share', open);
+    }
+
+    function toggleUrlBar(show) {
+        const bar = $('urlBar');
+        if (!bar) return;
+        bar.hidden = !show;
+        if (show) {
+            setActionMenu('', false);
+            el.urlInput.focus();
+        }
     }
 
     function readShareParams() {
@@ -1677,25 +1689,65 @@ ${bodyHtml}
         el.urlInput.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') { event.preventDefault(); loadFromUrl(el.urlInput.value); }
         });
-        $('btnShare').addEventListener('click', () => { setShareMenu(false); sharePrimary(); });
-        $('btnShareMenu').addEventListener('click', (event) => {
-            event.stopPropagation();
-            setShareMenu($('shareMenu').hidden);
+        [
+            ['btnOpenMenu', 'openMenu', 'open'],
+            ['btnShare', 'shareMenu', 'share'],
+            ['btnExportMenu', 'exportMenu', 'export'],
+        ].forEach(([triggerId, menuId, kind]) => {
+            const trigger = $(triggerId), menu = $(menuId);
+            trigger.addEventListener('click', (event) => {
+                event.stopPropagation();
+                setActionMenu(kind, menu.hidden);
+            });
+            trigger.addEventListener('keydown', (event) => {
+                if (event.key !== 'ArrowDown') return;
+                event.preventDefault();
+                setActionMenu(kind, true);
+                const first = menu.querySelector('[role="menuitem"]:not(:disabled)');
+                if (first) first.focus();
+            });
+            menu.addEventListener('keydown', (event) => {
+                const items = Array.from(menu.querySelectorAll('[role="menuitem"]:not(:disabled)'));
+                if (event.key === 'Escape') {
+                    event.preventDefault();
+                    setActionMenu('', false);
+                    trigger.focus();
+                } else if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key) && items.length) {
+                    event.preventDefault();
+                    const i = items.indexOf(document.activeElement);
+                    const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+                        : (i + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+                    items[next].focus();
+                }
+            });
+        });
+        $('openMenu').addEventListener('click', (event) => {
+            if (event.target.closest('[role="menuitem"]')) setActionMenu('', false);
+        });
+        $('btnOpenUrl').addEventListener('click', () => toggleUrlBar(true));
+        $('btnCloseUrl').addEventListener('click', () => {
+            toggleUrlBar(false);
+            $('btnOpenMenu').focus();
         });
         $('shareMenu').addEventListener('click', (event) => {
             const item = event.target.closest('[data-share]');
             if (!item || item.disabled) return;
-            setShareMenu(false);
+            setActionMenu('', false);
             if (item.dataset.share === 'url') copyUrlShareLink();
             else if (item.dataset.share === 'content') copyContentShareLink();
-            else if (item.dataset.share === 'download') downloadMarkdown();
+        });
+        $('exportMenu').addEventListener('click', (event) => {
+            const item = event.target.closest('[data-export]');
+            if (!item || item.disabled) return;
+            setActionMenu('', false);
+            if (item.dataset.export === 'md') downloadMarkdown();
         });
         document.addEventListener('click', (event) => {
-            if (event.target.closest && event.target.closest('.split-btn')) return;
-            setShareMenu(false);
+            if (event.target.closest && event.target.closest('.action-wrap')) return;
+            setActionMenu('', false);
         });
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape') setShareMenu(false);
+            if (event.key === 'Escape') setActionMenu('', false);
         });
         $('btnPrint').addEventListener('click', () => window.print());
         $('btnExport').addEventListener('click', exportHtml);
@@ -1796,6 +1848,8 @@ ${bodyHtml}
         paintShareAffordance,
         stripShareParams,
         setShareMenu,
+        setActionMenu,
+        toggleUrlBar,
         sanitize,
         readFile,
         handleFiles,
