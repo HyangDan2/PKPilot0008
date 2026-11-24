@@ -1,0 +1,66 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { rawAssetCandidates } = require('../../js/paths.js');
+const cases = [
+  [
+    "https://raw.githubusercontent.com/HyangDan2/diary/main/diary-src/posts/a.md",
+    "/diary/assets/images/a.png",
+    [
+      "https://raw.githubusercontent.com/HyangDan2/diary/main/assets/images/a.png",
+      "https://raw.githubusercontent.com/HyangDan2/diary/main/diary/assets/images/a.png"
+    ]
+  ],
+  [
+    "https://raw.githubusercontent.com/user/Project/refs/heads/main/docs/a.md",
+    "/project/assets/A.png?x=1#frag",
+    [
+      "https://raw.githubusercontent.com/user/Project/refs/heads/main/assets/A.png?x=1#frag",
+      "https://raw.githubusercontent.com/user/Project/refs/heads/main/project/assets/A.png?x=1#frag"
+    ]
+  ],
+  [
+    "https://raw.githubusercontent.com/u/r/main/posts/a.md",
+    "/assets/a.png",
+    [
+      "https://raw.githubusercontent.com/u/r/main/assets/a.png"
+    ]
+  ],
+  [
+    "https://raw.githubusercontent.com/u/r/main/docs/a.md",
+    "./assets/a.png",
+    [
+      "https://raw.githubusercontent.com/u/r/main/assets/a.png"
+    ]
+  ],
+  [
+    "https://raw.githubusercontent.com/u/r/main/docs/a.md",
+    "../assets/a.png",
+    []
+  ],
+  [
+    "https://example.com/docs/a.md",
+    "/r/assets/a.png",
+    []
+  ],
+  [
+    "https://raw.githubusercontent.com/u/r/main/docs/a.md",
+    "https://example.com/a.png",
+    []
+  ],
+  [
+    "https://raw.githubusercontent.com/u/r/main/docs/a.md",
+    "//example.com/a.png",
+    []
+  ],
+  [
+    "",
+    "/r/assets/a.png",
+    []
+  ],
+  [
+    "https://raw.githubusercontent.com/u/r/main/docs/a.md",
+    "data:image/png;base64,abc",
+    []
+  ]
+];
+cases.forEach(([source, ref, expected], i) => test('asset resolver '+(i+1)+': '+ref, () => assert.deepEqual(rawAssetCandidates(source, ref), expected)));

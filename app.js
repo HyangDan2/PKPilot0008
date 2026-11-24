@@ -373,22 +373,30 @@
         return hit ? hit[1] : '';
     }
 
-    function absoluteImageUrl(value) {
+    /* One ordered candidate list for preview and exports. */
+    function absoluteImageCandidates(value) {
         const raw = String(value || '').trim();
-        if (!raw) return '';
-        if (/^https?:\/\//i.test(raw)) return raw;
-        if (/^\/\//.test(raw)) return `${location.protocol}${raw}`;
-        /* a local file (and pasted or shared text) has no server base: ../assets/a.png must not
-           become https://hyangdan2.github.io/assets/a.png — the image simply is not loaded yet */
-        if (!state.sourceUrl) return '';
-        const base = state.sourceUrl || document.baseURI || location.href;
-        if (raw.startsWith('/')) {
-            const root = rawRepoRoot(state.sourceUrl);
-            if (root) {
-                try { return new URL(raw.replace(/^\/+/, ''), root).href; } catch (error) { /* fall through */ }
-            }
-        }
-        try { return new URL(raw, base).href; } catch (error) { return ''; }
+        if (!raw) return [];
+        if (/^https?:\/\//i.test(raw)) return [raw];
+        if (/^\/\//.test(raw)) return [`${location.protocol}${raw}`];
+        if (!state.sourceUrl || isRemotePath(raw)) return [];
+        const base = state.sourceUrl;
+        const rawCandidates = paths.rawAssetCandidates ? paths.rawAssetCandidates(base, raw) : [];
+        const values = raw.startsWith('/') && rawCandidates.length
+            ? rawCandidates
+            : [raw, ...rawCandidates];
+        const result = [];
+        values.forEach((candidate) => {
+            try {
+                const url = new URL(candidate, base);
+                if (/^https?:$/.test(url.protocol) && !result.includes(url.href)) result.push(url.href);
+            } catch (error) { /* invalid candidate */ }
+        });
+        return result;
+    }
+
+    function absoluteImageUrl(value) {
+        return absoluteImageCandidates(value)[0] || '';
     }
 
     /* relative images follow the document: local file map first, then the URL the doc came from */
@@ -459,10 +467,30 @@
             if (!raw) return;
             image.setAttribute('data-origin-src', raw);
             const next = previewImageSrc(raw);
+            image.onerror = null;
+            image.onload = null;
+            image.removeAttribute('data-asset-error');
             if (next) {
-                image.setAttribute('src', next);
+                const candidates = [...new Set([next, ...absoluteImageCandidates(raw)])];
+                let attempt = 0;
                 image.removeAttribute('data-missing-src');
                 image.classList.remove('is-missing-image');
+                image.onload = () => {
+                    image.removeAttribute('data-asset-error');
+                    image.classList.remove('is-missing-image');
+                };
+                image.onerror = () => {
+                    attempt += 1;
+                    if (attempt < candidates.length) {
+                        image.setAttribute('src', candidates[attempt]);
+                        return;
+                    }
+                    image.onerror = null;
+                    image.setAttribute('data-asset-error', candidates.join(' | '));
+                    image.classList.add('is-missing-image');
+                    image.title = '이미지를 불러오지 못했습니다: ' + raw + '\n' + candidates.join('\n');
+                };
+                image.setAttribute('src', next);
                 return;
             }
             image.removeAttribute('src');
@@ -1314,22 +1342,22 @@
             }
         }
 
-        const absolute = absoluteImageUrl(value);
-        if (!absolute || !/^https?:\/\//i.test(absolute)) return null;
-        try {
-            const response = await fetch(absolute, { mode: 'cors', credentials: 'omit' });
-            if (!response.ok) return null;
-            const blob = await response.blob();
-            const bytes = new Uint8Array(await blob.arrayBuffer());
-            if (!bytes.length) return null;
-            const ext = extensionFromMime(blob.type)
-                || extensionFromName(absolute)
-                || sniffExtension(bytes)
-                || (looksLikeSvg(bytes) ? 'svg' : 'png');
-            return { bytes, ext, origin: 'remote' };
-        } catch (error) {
-            return null;
+        for (const absolute of absoluteImageCandidates(value)) {
+            try {
+                const response = await fetch(absolute, { mode: 'cors', credentials: 'omit' });
+                if (!response.ok) continue;
+                const blob = await response.blob();
+                if (/^(?:text\/html|application\/json)(?:;|$)/i.test(blob.type)) continue;
+                const bytes = new Uint8Array(await blob.arrayBuffer());
+                if (!bytes.length) continue;
+                const ext = extensionFromMime(blob.type)
+                    || extensionFromName(absolute)
+                    || sniffExtension(bytes)
+                    || (looksLikeSvg(bytes) ? 'svg' : 'png');
+                return { bytes, ext, origin: 'remote' };
+            } catch (error) { /* try the next candidate */ }
         }
+        return null;
     }
 
     /* ---------------------------------------------------------------- zip bundle */
@@ -1486,7 +1514,10 @@
                 if (local) {
                     try { next = await dataUrlFromFile(local.file); } catch (error) { next = ''; }
                 }
-                image.setAttribute('src', next || htmlExportSrc(raw) || raw);
+                const current = image.getAttribute('src') || '';
+                const loaded = /^https?:\/\//i.test(current) && !image.hasAttribute('data-asset-error') ? current : '';
+                image.setAttribute('src', next || loaded || htmlExportSrc(raw) || raw);
+                image.removeAttribute('data-asset-error');
             }
             const title = el.docTitle.textContent || APP_NAME;
             const html = standalone(title, clone.innerHTML);

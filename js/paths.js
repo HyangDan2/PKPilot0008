@@ -124,7 +124,26 @@
         return name ? (map.get(name) || null) : null;
     }
 
+    /* GitHub Pages project-root references may include the repository prefix.
+       Keep the raw branch pinned; also retain the literal repository path as a fallback. */
+    function rawAssetCandidates(sourceUrl, value) {
+        var hit = /^(https?:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/(?:refs\/(?:heads|tags)\/)?[^/]+\/)/i.exec(String(sourceUrl || ''));
+        var raw = String(value || '').trim();
+        if (!hit || !raw || /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(raw)) return [];
+        var root = hit[1], repo = hit[3], tail = raw.replace(/^\/+/, '');
+        if (raw.charAt(0) === '/') {
+            var prefix = tail.split('/')[0];
+            if (prefix.toLowerCase() === repo.toLowerCase() && tail.indexOf('/') >= 0) {
+                return [root + tail.slice(prefix.length + 1), root + tail];
+            }
+            return [root + tail];
+        }
+        if (/^(?:\.\/)?assets\//i.test(raw)) return [root + raw.replace(/^\.\//, '')];
+        return [];
+    }
+
     return {
+        rawAssetCandidates: rawAssetCandidates,
         normalizePath: normalizePath,
         dirnameOf: dirnameOf,
         basenameOf: basenameOf,
