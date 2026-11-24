@@ -528,3 +528,40 @@ header .icon-btn, .header-actions a.header-icon { text-decoration: none; }
     .action-menu { min-width: 208px; }
 }
 @media print { .action-menu { display: none !important; } }
+
+
+/* Repository open — shared PKPilot0007 controls */
+.field-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field-wide { grid-column: span 2; }
+.field-label { color: var(--text); font-size: 12px; font-weight: 650; }
+.field-label em { margin-left: 6px; color: var(--text-secondary); font-family: var(--mono); font-size: 9.5px; font-style: normal; letter-spacing: .12em; text-transform: uppercase; }
+.field input, .field select { width: 100%; min-height: 38px; padding: 8px 11px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); color: var(--text); font-size: 13px; transition: border-color .2s, background .2s, box-shadow .2s; }
+/* load dialog */
+.load-row { margin: 16px 0 0; padding: 14px 16px; border: 1px solid var(--border-soft); border-radius: 8px; background: var(--surface-2); }
+.load-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 14px; }
+.load-target { flex: 1 1 220px; margin: 0; color: var(--text-secondary); font-family: var(--mono); font-size: 10.5px; letter-spacing: .02em; overflow-wrap: anywhere; }
+.load-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.load-select-wrap { flex: 1 1 260px; min-width: 0; display: flex; }
+#postList { width: 100%; min-height: 38px; padding: 8px 36px 8px 12px; border: 1px solid var(--border); border-radius: 6px; background-color: var(--surface); color: var(--text); font-family: var(--mono); font-size: 12px; letter-spacing: .01em; text-overflow: ellipsis; appearance: none; background-image: linear-gradient(45deg, transparent 50%, var(--accent) 50%), linear-gradient(135deg, var(--accent) 50%, transparent 50%); background-position: calc(100% - 19px) 16px, calc(100% - 14px) 16px; background-size: 5px 5px, 5px 5px; background-repeat: no-repeat; transition: border-color .2s, box-shadow .2s; }
+#postList:hover:not(:disabled) { border-color: var(--line-strong); }
+#postList:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px var(--accent-soft); }
+#postList:disabled { opacity: .62; }
+.load-controls .button { min-height: 38px; }
+.load-status { margin: 10px 0 0; color: var(--text-secondary); font-size: 11.5px; line-height: 1.75; overflow-wrap: anywhere; }
+.load-status code { padding: 1px 5px; border-radius: 3px; background: var(--surface); color: var(--accent-text); font-size: 11px; }
+.load-status strong { color: var(--text); }
+.load-status.is-ok { color: var(--ok); }
+.load-status.is-warn { color: var(--warn); }
+.load-status.is-err { color: var(--danger); }
+
+
+.dialog-sub { margin: 6px 0 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.65; }
+.dialog-sub code, .field-hint code, .publish-hint code { padding: 1px 5px; border-radius: 3px; background: var(--surface-2); color: var(--accent-text); font-size: 11px; }
+.preset-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 2px; }
+.preset-chip { padding: 7px 13px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--text-body); font-size: 12px; font-weight: 650; letter-spacing: -.01em; transition: background .18s, border-color .18s, color .18s; }
+.preset-chip:hover { border-color: var(--accent); color: var(--accent-text); }
+.preset-chip.is-active { border-color: var(--accent); background: var(--accent); color: #FFFFFF; }
+[data-theme="dark"] .preset-chip.is-active { color: #0B1020; }
+.field-hint { margin: 8px 0 0; color: var(--text-secondary); font-size: 11.5px; line-height: 1.7; }
+@media (max-width: 560px) { #repoSettingsDialog .field-grid { grid-template-columns: minmax(0,1fr); } #repoSettingsDialog .field-wide { grid-column: auto; } }

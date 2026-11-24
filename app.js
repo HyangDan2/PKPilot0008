@@ -936,6 +936,7 @@
             toggleUrlBar(false);
             toast(converted ? 'GitHub 원문(raw) 주소로 바꾸어 불러왔습니다.' : 'URL 문서를 열었습니다.', 'ok');
             announce(converted ? 'GitHub 원문 문서를 열었습니다.' : 'URL 문서를 열었습니다.');
+            return true;
         } catch (error) {
             /* the document on screen keeps its own share source — nothing is overwritten on failure */
             toast(`불러오지 못했습니다 (${escapeHtml(error.message)}). 이 사이트가 CORS를 허용하지 않으면 파일로 내려받아 열거나 본문을 붙여넣어 주세요.`, 'err');
@@ -946,6 +947,7 @@
                 paintShareAffordance();
                 announce('URL 문서를 불러오지 못했습니다.');
             }
+            return false;
         }
     }
 
@@ -1610,7 +1612,98 @@ ${bodyHtml}
         toast('문서를 닫았습니다.');
     }
 
+    /* ---------------------------------------------------------------- repository open */
+    function wireRepositoryOpen() {
+        const repo = window.HD2Repository;
+        if (!repo) return;
+        const dialog = $('loadDialog'), settingsDialog = $('repoSettingsDialog');
+        const select = $('postList'), listButton = $('btnListPosts'), openButton = $('btnLoadPost');
+        let settings = repo.read(window.localStorage), listedSettings = null, items = new Map(), busy = false, returnToList = false;
+        function status(message, kind) {
+            const node = $('loadStatus');
+            node.textContent = message;
+            node.className = 'load-status' + (kind ? ' is-' + kind : '');
+        }
+        function target() { $('loadTarget').textContent = settings.repo + ' · ' + settings.branch + ' · ' + (settings.path || '루트'); }
+        function resetList(message) {
+            listedSettings = null; items = new Map();
+            select.replaceChildren(new Option(message || '목록 불러오기를 눌러 주세요.', ''));
+            select.disabled = true; openButton.disabled = true; target();
+        }
+        function paintForm(s) { $('ghRepo').value = s.repo; $('ghBranch').value = s.branch; $('ghPath').value = s.path; }
+        function show(d) { if (!d.open) d.showModal(); }
+        function showSettings(fromList) {
+            if (busy) return;
+            returnToList = fromList;
+            if (fromList && dialog.open) dialog.close();
+            paintForm(settings); $('repoSettingsStatus').textContent = '';
+            show(settingsDialog);
+        }
+        function lock(value) {
+            busy = value; listButton.disabled = value; $('btnRepoSettings').disabled = value;
+            select.disabled = value || !items.size;
+            openButton.disabled = value || !select.value || !items.has(select.value);
+            dialog.querySelectorAll('[type="submit"]').forEach(b => { b.disabled = value; });
+        }
+        async function listPosts() {
+            if (busy) return;
+            resetList(); lock(true); listButton.textContent = '불러오는 중…';
+            status('글 목록을 불러오는 중입니다.');
+            const snapshot = { ...settings };
+            try {
+                const response = await fetch(repo.listUrl(snapshot), { headers: { Accept: 'application/vnd.github+json' }, credentials: 'omit' });
+                if (!response.ok) {
+                    if (response.status === 403 || response.status === 429) throw new Error('GitHub 요청 한도 또는 접근 제한입니다. 공개 저장소인지 확인하고 다시 시도해 주세요.');
+                    if (response.status === 404) throw new Error('저장소, 브랜치 또는 폴더를 찾지 못했습니다. 공개 저장소인지 확인해 주세요.');
+                    throw new Error('GitHub HTTP ' + response.status);
+                }
+                const posts = repo.posts(await response.json());
+                listedSettings = snapshot; items = new Map(posts.map(p => [p.path,p]));
+                select.replaceChildren(new Option(posts.length ? '글 ' + posts.length + '건 · 고르면 바로 열립니다' : '불러올 글이 없습니다.', ''));
+                posts.forEach(p => select.add(new Option(p.name, p.path)));
+                status(posts.length ? '글 ' + posts.length + '건을 불러왔습니다. 목록에서 고르면 바로 열립니다.' : '이 폴더에 Markdown 글이 없습니다.', posts.length ? 'ok' : 'warn');
+            } catch (error) { resetList('목록을 불러오지 못했습니다.'); status(error.message, 'err'); }
+            finally { listButton.textContent = '목록 불러오기'; lock(false); }
+        }
+        async function openPost() {
+            const item = items.get(select.value);
+            if (busy || !item || !listedSettings) return;
+            lock(true); openButton.textContent = '여는 중…'; status(item.name + ' 파일을 여는 중입니다.');
+            try {
+                const opened = await loadFromUrl(repo.rawUrl(listedSettings, item));
+                if (!opened) throw new Error('문서를 불러오지 못했습니다. 원본 파일의 접근 권한과 경로를 확인해 주세요.');
+                status(item.name + ' 글을 열었습니다.', 'ok');
+                if (dialog.open) dialog.close();
+            } catch (error) { status(error.message, 'err'); }
+            finally { openButton.textContent = '불러오기'; lock(false); }
+        }
+        $('btnLoadDialog').addEventListener('click', () => { target(); setActionMenu('', false); show(dialog); if (select.disabled) listButton.focus(); });
+        $('btnSettings').addEventListener('click', () => showSettings(false));
+        $('btnRepoSettings').addEventListener('click', () => showSettings(true));
+        $('repoPresetDiary').addEventListener('click', () => paintForm(repo.defaults));
+        $('repoReset').addEventListener('click', () => paintForm(repo.defaults));
+        $('repoPresetGeneral').addEventListener('click', () => paintForm({ repo: $('ghRepo').value, branch: 'main', path: 'docs/' }));
+        $('repoSave').addEventListener('click', () => {
+            const next = repo.normalize({ repo: $('ghRepo').value, branch: $('ghBranch').value, path: $('ghPath').value });
+            if (!repo.valid(next)) { $('repoSettingsStatus').textContent = '저장소(owner/repo), 브랜치와 폴더 경로를 확인해 주세요.'; return; }
+            settings = next;
+            try { localStorage.setItem(repo.ownKey, JSON.stringify(next)); } catch (error) { /* session still works */ }
+            resetList(); status('저장소 설정을 변경했습니다. 목록을 불러와 주세요.', 'ok');
+            settingsDialog.close();
+        });
+        $('repoSettingsForm').addEventListener('submit', event => {
+            if (!event.submitter || event.submitter.value !== 'cancel') { event.preventDefault(); $('repoSave').click(); }
+        });
+        settingsDialog.addEventListener('close', () => { if (returnToList) { returnToList = false; show(dialog); } });
+        dialog.addEventListener('cancel', event => { if (busy) event.preventDefault(); });
+        listButton.addEventListener('click', listPosts);
+        openButton.addEventListener('click', openPost);
+        select.addEventListener('change', () => { openButton.disabled = !select.value; if (select.value) openPost(); });
+        resetList();
+    }
+
     function wireEvents() {
+        wireRepositoryOpen();
         $('btnOpenFile').addEventListener('click', () => el.fileInput.click());
         el.fileInput.addEventListener('change', (event) => {
             ingestFiles(event.target.files, { folderRoot: '' });

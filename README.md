@@ -14,8 +14,7 @@ document on the right, each with its own `overflow-y: auto` scroll area. The doc
 the viewport edge while the running text keeps a ~960px measure. `app.js` measures scrolling
 against the document pane (TOC jumps, IntersectionObserver root, the *back to top* button), not the window.
 
-The main toolbar shows just three SVG icons: open (folder), share (three connected dots), and
-export (download). Each icon opens an accessible named menu. File/folder/URL/paste/sample live under
+The main toolbar shows four SVG icons: open (folder), repository open (document and magnifier), share (three connected dots), and export (download). Each icon opens an accessible named menu. File/folder/URL/paste/sample live under
 open; original/content links under share; Markdown/HTML/ZIP/PDF under export. The URL field is
 contextual and hidden by default, including on mobile. Header help/theme/portal actions remain.
 `@media print` unpins the shell (`height: auto; overflow: visible`) so the full document prints.
@@ -46,6 +45,8 @@ contextual and hidden by default, including on mobile. Header help/theme/portal 
   `raw.githubusercontent.com` before fetching, so any public repository's markdown opens by URL.
   Relative images (`./a.png`, `assets/b.png`) and root-relative ones (`/diary/assets/c.png`) resolve
   against that raw URL — the repo root for a leading `/` — both in the preview and in the ZIP export.
+- **Repository open**: same document-search icon and list modal as PKPilot0007. Configure public `owner/repo`, branch, and folder via the gear; initially reuses editor repository settings if present, then stores viewer settings independently. Select a Markdown file to open its raw URL with asset resolution and sharing. No token or write access.
+
 ## Share and export
 
 - **Open icon (folder):** choose a local file, a whole folder with images, a URL (reveals the URL input),

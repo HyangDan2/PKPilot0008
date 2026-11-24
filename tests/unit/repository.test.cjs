@@ -1,0 +1,12 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const r = require('../../js/repository.js');
+const storage = values => ({ getItem: key => values[key] || null });
+test('defaults', () => assert.deepEqual(r.read(storage({})), {repo:'HyangDan2/diary',branch:'main',path:'diary-src/posts'}));
+test('editor settings inherited without secrets', () => assert.deepEqual(r.read(storage({hd2_md_github_v1:'{"repo":"u/r","branch":"dev","path":"docs/","token":"secret"}'})), {repo:'u/r',branch:'dev',path:'docs'}));
+test('viewer settings override editor', () => assert.equal(r.read(storage({[r.ownKey]:'{"repo":"x/y","path":""}',hd2_md_github_v1:'{"repo":"u/r"}'})).repo,'x/y'));
+test('root and branch encoded', () => assert.equal(r.listUrl(r.normalize({repo:'u/r',branch:'feature/docs',path:''})),'https://api.github.com/repos/u/r/contents/?ref=feature%2Fdocs'));
+test('folder Unicode and spaces encoded', () => assert.equal(r.listUrl(r.normalize({repo:'u/r',path:'한 글/'})),'https://api.github.com/repos/u/r/contents/%ED%95%9C%20%EA%B8%80?ref=main'));
+test('markdown list sorted, ignores dirs and images', () => assert.deepEqual(r.posts([{type:'file',name:'a.md',path:'a.md'},{type:'file',name:'z.markdown',path:'z.markdown'},{type:'dir',name:'b.md',path:'b.md'},{type:'file',name:'c.png',path:'c.png'}]).map(x=>x.name),['z.markdown','a.md']));
+test('raw path retains source repo and branch', () => assert.equal(r.rawUrl(r.normalize({repo:'u/r',branch:'dev',path:'docs'}),{path:'docs/a b.md'}),'https://raw.githubusercontent.com/u/r/dev/docs/a%20b.md'));
+test('reject invalid repository and traversal', () => { assert.equal(r.valid(r.normalize({repo:'https://example.com'})),false); assert.equal(r.valid(r.normalize({repo:'u/r',path:'../docs'})),false); });
