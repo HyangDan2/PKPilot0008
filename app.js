@@ -997,12 +997,15 @@
         return 'document.md';
     }
 
-    function downloadMarkdown() {
+    async function downloadMarkdown() {
         if (!hasDocument()) { toast('먼저 문서를 열어 주세요. 내려받을 본문이 없습니다.', 'err'); return; }
-        const name = markdownDownloadName();
-        download(name, state.markdown, 'text/markdown;charset=utf-8');
-        toast(`${escapeHtml(name)} 파일을 내려받았습니다.`, 'ok');
-        announce(`${name} 파일을 내려받았습니다.`);
+        try {
+            const bundle=await buildZipBundle(state.markdown);
+            const name=bundle.slug+'-'+bundle.hash8+'.md';
+            download(name,bundle.markdown,'text/markdown;charset=utf-8');
+            toast(bundle.images?'MD 저장 완료 · 이미지는 동일한 ZIP의 assets/를 사용하세요.':escapeHtml(name)+' 파일을 내려받았습니다.',bundle.images?'warn':'ok');
+            announce(name+' 파일을 내려받았습니다.');
+        } catch(error) {toast('MD 저장 실패: '+escapeHtml(error.message),'err');}
     }
 
     function sharePrimary() {

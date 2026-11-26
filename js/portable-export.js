@@ -195,47 +195,65 @@
 
 function imageMetadataRefs(text) {
     const fm = /^(?:\uFEFF)?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/.exec(text);
-    if (!fm) return { refs: [], end: 0 };
-    const offset = fm[0].indexOf('\n') + 1;
-    const refs = [];
-    const keyPattern = /^(?:image|images|cover|coverimage|coverurl|thumbnail|thumbnailimage|thumbnailurl|ogimage|twitterimage|featuredimage|heroimage|banner|bannerimage|socialimage|previewimage|imageurl|imagepath|poster)$/i;
-    let active = false, parentIndent = 0, cursor = offset;
-    function add(value, start) {
-        const leading = value.match(/^\s*/)[0].length;
-        let raw = value.slice(leading);
-        start += leading;
-        if (!raw || /^(?:null|~)(?:\s+#.*)?$/i.test(raw) || raw.startsWith('#')) return;
-        let hit;
-        if (raw[0] === '"' || raw[0] === "'") {
-            const q = raw[0];
-            const stop = raw.indexOf(q, 1);
-            if (stop < 0 || !/^\s*(?:#.*)?$/.test(raw.slice(stop + 1))) throw new Error('Unsupported quoted image metadata');
-            hit = raw.slice(1, stop);
-            start++;
-        } else {
-            if (/^[|>{[\]&*!]/.test(raw)) throw new Error('Unsupported image metadata format; use a scalar path or nested url/path/src.');
-            hit = raw.replace(/\s+#.*$/, '').trimEnd();
-        }
-        if (hit) refs.push({url: hit, start, end: start + hit.length});
-    }
-    for (const line of fm[1].split(/\r?\n/)) {
-        const pair = /^(\s*)([\w-]+)\s*:\s*(.*)$/.exec(line);
-        if (pair) {
-            const indent = pair[1].length, key = pair[2].replace(/[-_]/g, '');
-            if (active && indent <= parentIndent) active = false;
-            if (keyPattern.test(key)) {
-                active = true; parentIndent = indent;
-                add(pair[3], cursor + line.length - pair[3].length);
-            } else if (active && /^(?:url|path|src|href)$/i.test(key)) {
-                add(pair[3], cursor + line.length - pair[3].length);
+    if (!fm) return {refs:[],end:0};
+    const refs=[];
+    const keyPattern=/^(?:images?|covers?|coverimage|coverurl|thumbnail|thumbnailimage|thumbnailurl|ogimage|ogimageurl|twitterimage|featuredimage|heroimage|banner|bannerimage|socialimage|previewimage|imageurl|imagepath|imagesrc|poster)$/i;
+    const norm=key=>key.replace(/[-_:]/g,'').toLowerCase();
+    let active=false,parentIndent=0,cursor=fm[0].indexOf('\n')+1;
+    function add(value,start) {
+        const leading=value.match(/^\s*/)[0].length;
+        let raw=value.slice(leading);
+        start+=leading;
+        if(!raw||/^(?:null|~)(?:\s+#.*)?$/i.test(raw)||raw.startsWith('#'))return;
+        if(raw.startsWith('[')){
+            let quote='',begin=1,closed=false;
+            for(let i=1;i<raw.length;i++){
+                const c=raw[i];
+                if(quote){
+                    if(c===quote){if(quote==="'"&&raw[i+1]==="'"){i++;continue;}quote='';}
+                    else if(c==='\\'&&quote==='"')i++;
+                    continue;
+                }
+                if(c==='"'||c==="'"){quote=c;continue;}
+                if(c===','||c===']'){
+                    add(raw.slice(begin,i),start+begin);begin=i+1;
+                    if(c===']'){closed=true;if(!/^\s*(?:#.*)?$/.test(raw.slice(i+1)))throw Error('Unsupported image metadata array');break;}
+                }
             }
-        } else if (active) {
-            const item = /^(\s*)-\s+(.*)$/.exec(line);
-            if (item && item[1].length >= parentIndent) add(item[2], cursor + line.length - item[2].length);
+            if(!closed)throw Error('Unclosed image metadata array');
+            return;
         }
-        cursor += line.length + (text.slice(cursor + line.length, cursor + line.length + 2) === '\r\n' ? 2 : 1);
+        if(raw[0]==='"'||raw[0]==="'"){
+            const q=raw[0];let stop=1;
+            for(;stop<raw.length;stop++){
+                if(raw[stop]==='\\'&&q==='"'){stop++;continue;}
+                if(raw[stop]===q){if(q==="'"&&raw[stop+1]==="'"){stop++;continue;}break;}
+            }
+            if(stop>=raw.length||!/^\s*(?:#.*)?$/.test(raw.slice(stop+1)))throw Error('Unsupported quoted image metadata');
+            const val=raw.slice(1,stop);
+            if(val)refs.push({url:q==="'"?val.replace(/''/g,"'"):val.replace(/\\(["\\])/g,'$1'),start:start+1,end:start+stop});
+            return;
+        }
+        if(/^[|>{\]&*!]/.test(raw))throw Error('Unsupported image metadata format; use scalar, array or nested url/path/src');
+        raw=raw.replace(/\s+#.*$/,'').trimEnd();
+        if(raw)refs.push({url:raw,start,end:start+raw.length});
     }
-    return {refs, end: fm[0].length};
+    for(const line of fm[1].split(/\r?\n/)){
+        const pair=/^(\s*)(?:-\s+)?(?:"([^"]+)"|'([^']+)'|([\w-]+))\s*:\s*(.*)$/.exec(line);
+        if(pair){
+            const indent=pair[1].length,key=norm(pair[2]||pair[3]||pair[4]),value=pair[5];
+            if(active&&indent<=parentIndent)active=false;
+            if(keyPattern.test(key)){
+                active=true;parentIndent=indent;
+                add(value,cursor+line.length-value.length);
+            }else if(active&&/^(?:url|path|src|href)$/i.test(key))add(value,cursor+line.length-value.length);
+        }else if(active){
+            const item=/^(\s*)-\s+(.*)$/.exec(line);
+            if(item&&item[1].length>=parentIndent)add(item[2],cursor+line.length-item[2].length);
+        }
+        cursor+=line.length+(text.slice(cursor+line.length,cursor+line.length+2)==='\r\n'?2:1);
+    }
+    return {refs,end:fm[0].length};
 }
 function additionalBodyRefs(text, ranges, inRanges, cleanImageUrl) {
     const refs = [], definitions = new Map(), used = new Set();
@@ -296,6 +314,8 @@ async function buildBundle(markdown, collectImage, slug) {
  if(missing.length) throw new Error('이미지 '+missing.length+'개 누락: '+missing.map(x=>x.slice(0,160)).join(', '));
  let output=text;
  for(const ref of refs.slice().sort((a,b)=>b.start-a.start)) output=output.slice(0,ref.start)+resolved.get(ref.url)+output.slice(ref.end);
+ const packaged=new Set(assets.map(a=>'/'+a.path));
+ for(const ref of collectImageRefs(output))if(!packaged.has(ref.url))throw Error('Unpackaged image reference: '+ref.url);
  const hash8=(await sha256Hex(new TextEncoder().encode(output))).slice(0,8);
  return {markdown:output,assets,replaced:refs.length,missed:0,images:assets.length,duplicates:Math.max(0,refs.length-assets.length),hash8,slug};
 }

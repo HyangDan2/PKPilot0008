@@ -14,3 +14,5 @@ test('metadata and body share same archive entries; original unchanged',async()=
 });
 test('missing metadata image blocks export',async()=>assert.rejects(buildBundle('---\nimage: missing.png\n---\ntext',async()=>null,'post'),/missing.png/));
 test('CRLF quoted metadata positions preserve comments',()=>{const s='---\r\nimage: "/assets/a.png" # note\r\n---\r\n';const refs=collectImageRefs(s);assert.equal(refs.length,1);assert.equal(s.slice(refs[0].start,refs[0].end),'/assets/a.png');});
+
+test('inline image arrays and quoted social image keys are remapped',async()=>{const input='---\nimages: ["/diary/assets/a.png", "../assets/b.png"] # keep\n"og:image": /diary/assets/a.png\n---\n![a](/diary/assets/a.png)';const result=await buildBundle(input,async url=>({bytes:Uint8Array.of(url.includes('b.png')?2:1),ext:'png'}),'post');assert.equal(result.replaced,4);assert.equal(result.images,2);assert.ok(!result.markdown.includes('/diary/assets/'));assert.ok(result.markdown.includes('# keep'));});
