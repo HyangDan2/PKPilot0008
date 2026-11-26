@@ -315,6 +315,18 @@ function assetLinkRefs(text,ranges) {
         add(raw,start);
         if(pathLabel(label))refs.push({url,start:hit.index+hit[1].length+1,end:hit.index+hit[1].length+1+label.length});
     }
+    // A linked image is two independent URL destinations. The ordinary
+    // link matcher consumes the inner image and would skip the outer href.
+    const linkedImage=/\[!\[[^\]\n]*\]\(\s*(?:<[^>\n]*>|(?:[^\s()]|\([^\s()]*\))+)(?:\s+(?:"[^"]*"|'[^']*'|\([^\s()]*\)))?\s*\)\]\(\s*(<[^>\n]*>|(?:[^\s()]|\([^\s()]*\))+)(?:\s+(?:"[^"]*"|'[^']*'|\([^\s()]*\)))?\s*\)/g;
+    while((hit=linkedImage.exec(text))){
+        if(inRanges(hit.index,ranges))continue;
+        const raw=hit[1],url=cleanImageUrl(raw.replace(/^<|>$/g,''));
+        if(!assetPath(url))continue;
+        // The final ]( opens the outer destination; find it before that raw value.
+        const outer=hit[0].lastIndexOf('](');
+        const start=hit.index+hit[0].indexOf(raw,outer+2);
+        add(raw,start);
+    }
     const definitions=new Map();
     const definition=/^ {0,3}\[([^\]\n]+)\]:[ \t]*(<[^>\n]+>|[^\s]+)(?:[ \t]+.*)?$/gm;
     while((hit=definition.exec(text))){
