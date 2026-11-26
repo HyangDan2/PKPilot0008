@@ -289,10 +289,64 @@ function additionalBodyRefs(text, ranges, inRanges, cleanImageUrl) {
     }
     return refs;
 }
+function assetLinkRefs(text,ranges) {
+    const refs=[];
+    const assetPath=value=>{
+        const raw=String(value||'').trim();
+        if(!raw||/^(?:data:|mailto:|tel:|javascript:|#)/i.test(raw))return false;
+        const path=raw.split(/[?#]/)[0].replace(/\\/g,'/');
+        return /(?:^|\/)assets\//i.test(path)||/\.(?:png|apng|jpe?g|gif|webp|avif|svg|bmp|ico|tiff?|heic|heif)$/i.test(path);
+    };
+    const pathLabel=value=>/^(?:\/|\.\.?\/|assets\/)/i.test(value)&&assetPath(value);
+    const labelKey=value=>value.trim().replace(/\s+/g,' ').toLowerCase();
+    function add(raw,start,extra={}) {
+        const wrapped=raw.startsWith('<')&&raw.endsWith('>');
+        const url=cleanImageUrl(wrapped?raw.slice(1,-1):raw);
+        if(!url)return;
+        refs.push({url,start:start+(wrapped?1:0),end:start+raw.length-(wrapped?1:0),...extra});
+    }
+    const inline=/(!?)\[([^\]\n]*)\]\(\s*(<[^>\n]*>|(?:[^\s()]|\([^\s()]*\))+)(?:\s+(?:"[^"]*"|'[^']*'|\([^\s()]*\)))?\s*\)/g;
+    let hit;
+    while((hit=inline.exec(text))){
+        if(inRanges(hit.index,ranges))continue;
+        const label=hit[2],raw=hit[3],url=cleanImageUrl(raw.replace(/^<|>$/g,''));
+        if(!assetPath(url)&&!pathLabel(label))continue;
+        const start=hit.index+hit[0].indexOf(raw,hit[0].indexOf('](')+2);
+        add(raw,start);
+        if(pathLabel(label))refs.push({url,start:hit.index+hit[1].length+1,end:hit.index+hit[1].length+1+label.length});
+    }
+    const definitions=new Map();
+    const definition=/^ {0,3}\[([^\]\n]+)\]:[ \t]*(<[^>\n]+>|[^\s]+)(?:[ \t]+.*)?$/gm;
+    while((hit=definition.exec(text))){
+        if(inRanges(hit.index,ranges))continue;
+        const raw=hit[2],url=cleanImageUrl(raw.replace(/^<|>$/g,''));
+        if(!assetPath(url)||definitions.has(labelKey(hit[1])))continue;
+        const start=hit.index+hit[0].indexOf(raw,hit[0].indexOf(']:')+2);
+        add(raw,start);
+        definitions.set(labelKey(hit[1]),url);
+    }
+    const explicit=/(!?)\[([^\]\n]+)\]\[([^\]\n]+)\]/g;
+    while((hit=explicit.exec(text))){
+        if(inRanges(hit.index,ranges)||!pathLabel(hit[2]))continue;
+        const url=definitions.get(labelKey(hit[3]));
+        if(url)refs.push({url,start:hit.index+hit[1].length+1,end:hit.index+hit[1].length+1+hit[2].length});
+    }
+    const tags=/<a\b[^>]*>/gi;
+    while((hit=tags.exec(text))){
+        if(inRanges(hit.index,ranges))continue;
+        const attr=/(?:^|\s)href\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(hit[0]);
+        if(!attr)continue;
+        const raw=attr[1]??attr[2]??attr[3];
+        if(!assetPath(raw))continue;
+        const start=hit.index+attr.index+attr[0].indexOf(raw,attr[0].indexOf('=')+1);
+        add(raw,start);
+    }
+    return refs;
+}
 function collectImageRefs(input) {
  const text=String(input||''); const fm=imageMetadataRefs(text);
  const body=text.slice(fm.end); const ranges=codeRanges(body);
- const bodyRefs=collectBodyImageRefs(body).concat(additionalBodyRefs(body,ranges,inRanges,cleanImageUrl));
+ const bodyRefs=collectBodyImageRefs(body).concat(additionalBodyRefs(body,ranges,inRanges,cleanImageUrl),assetLinkRefs(body,ranges));
  const refs=fm.refs.concat(bodyRefs.map(r=>({...r,start:r.start+fm.end,end:r.end+fm.end})));
  return Array.from(new Map(refs.filter(r=>r.url).map(r=>[r.start+':'+r.end,r])).values());
 }
