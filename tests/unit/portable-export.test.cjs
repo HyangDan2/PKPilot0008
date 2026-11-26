@@ -31,3 +31,22 @@ test('asset link label and destination use the same packaged path',async()=>{
  assert.ok(result.markdown.includes('`[code](/diary/assets/images/a.png)`'));
  assert.ok(collectImageRefs(result.markdown).every(ref=>ref.url===path));
 });
+
+test('clickable images rewrite inner src and outer href to the same asset',async()=>{
+ const input='[![image](/diary/assets/images/a.png)](/diary/assets/images/a.png "view")';
+ const result=await buildBundle(input,async()=>({bytes:Uint8Array.of(1),ext:'png'}),'post');
+ const path='/'+result.assets[0].path;
+ assert.equal(result.images,1);
+ assert.equal(result.replaced,2);
+ assert.equal(result.markdown,'[![image]('+path+')]('+path+' "view")');
+});
+test('linked thumbnail and distinct original are both packaged, external non-asset link stays unchanged',async()=>{
+ const input='[![thumb](../assets/thumb.png)](/diary/assets/full.png)\n[![logo](/diary/assets/logo.png)](https://example.com/docs)\n`[![code](/diary/assets/code.png)](/diary/assets/code.png)`';
+ const urls=['../assets/thumb.png','/diary/assets/full.png','/diary/assets/logo.png'];
+ const result=await buildBundle(input,async url=>({bytes:Uint8Array.of(urls.indexOf(url)+1),ext:'png'}),'post');
+ assert.equal(result.images,3);
+ assert.equal(result.replaced,3);
+ assert.ok(result.markdown.includes('](https://example.com/docs)'));
+ assert.ok(result.markdown.includes('`[![code](/diary/assets/code.png)](/diary/assets/code.png)`'));
+ for(const ref of collectImageRefs(result.markdown))assert.ok(result.assets.some(asset=>'/'+asset.path===ref.url));
+});
