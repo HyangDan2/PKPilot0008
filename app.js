@@ -1211,7 +1211,7 @@
     }
 
     /* every markdown image and <img src> outside code, as exact [start, end) of the url text */
-    function collectImageRefs(src) {
+    function legacyCollectImageRefs(src) {
         const text = String(src || '');
         const ranges = codeRanges(text);
         const refs = [];
@@ -1256,6 +1256,8 @@
 
         return refs;
     }
+
+    function collectImageRefs(src) { return window.PortableExport.collectImageRefs(src); }
 
     /* ---------------------------------------------------------------- image bytes */
     const MIME_EXT = {
@@ -1375,52 +1377,7 @@
     }
 
     async function buildZipBundle(markdown) {
-        const text = String(markdown || '');
-        const refs = collectImageRefs(text);
-        const pending = [];
-        refs.forEach((ref) => { if (!pending.includes(ref.url)) pending.push(ref.url); });
-
-        const resolved = new Map();
-        const assets = [];
-        const hashToPath = new Map();
-
-        for (let i = 0; i < pending.length; i += 1) {
-            const url = pending[i];
-            const image = await collectImage(url);
-            if (!image) continue;
-            const hex = await sha256Hex(image.bytes);
-            const hash12 = hex.slice(0, 12);
-            const ext = image.ext || 'png';
-            let path = hashToPath.get(hash12);
-            if (!path) {
-                path = `assets/${hash12}.${ext}`;
-                hashToPath.set(hash12, path);
-                assets.push({ path, bytes: image.bytes });
-            }
-            /* the zip entry is assets/…, the body points at the site root: /assets/… */
-            resolved.set(url, `/${path}`);
-        }
-
-        let output = text;
-        let replaced = 0;
-        refs.slice().sort((a, b) => b.start - a.start).forEach((ref) => {
-            const path = resolved.get(ref.url);
-            if (!path) return;
-            output = output.slice(0, ref.start) + path + output.slice(ref.end);
-            replaced += 1;
-        });
-
-        const hash8 = (await sha256Hex(new TextEncoder().encode(output))).slice(0, 8);
-        return {
-            markdown: output,
-            assets,
-            replaced,
-            missed: pending.filter((url) => !resolved.has(url)).length,
-            images: assets.length,
-            duplicates: Math.max(0, replaced - assets.length),
-            hash8,
-            slug: documentSlug(),
-        };
+        return window.PortableExport.buildBundle(markdown, collectImage, documentSlug());
     }
 
     async function exportZip() {
@@ -1444,6 +1401,8 @@
             const bundle = await buildZipBundle(state.markdown);
             const base = `${bundle.slug}-${bundle.hash8}`;
             const zip = new window.JSZip();
+            zip.folder('posts');
+            zip.folder('assets');
             zip.file(`posts/${base}.md`, bundle.markdown, { createFolders: false });
             bundle.assets.forEach((asset) => zip.file(asset.path, asset.bytes, { binary: true, createFolders: false }));
             const blob = await zip.generateAsync({
