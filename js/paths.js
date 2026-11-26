@@ -81,6 +81,19 @@
         var key = normalizePath(value);
         if (!key || isRemotePath(value)) return null;
 
+        // Infer the actual package root from the selected post, not from the
+        // outer folder chosen by the file picker (e.g. Downloads/export/posts).
+        var parts = normalizePath(docPath || '').split('/');
+        var postIndex = parts.lastIndexOf('posts', parts.length - 2);
+        var packageDir = postIndex >= 0 ? parts.slice(0, postIndex).join('/') : null;
+        var canonicalAsset = /^\/?assets\//i.test(String(value || ''));
+        if (packageDir !== null && canonicalAsset) {
+            var target = collapsePath((packageDir ? packageDir + '/' : '') + key);
+            var packaged = map.get(target);
+            if (packaged) return packaged;
+            var added = map.get(key.split('/').pop());
+            return added && !added.relative ? added : null;
+        }
         var resolved = resolveRelativePath(docPath || '', value, rootPrefix || '');
         if (resolved) {
             var exact = map.get(resolved);

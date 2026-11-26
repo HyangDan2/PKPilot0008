@@ -497,6 +497,11 @@
             image.setAttribute('data-missing-src', raw);
             image.classList.add('is-missing-image');
         });
+        el.article.querySelectorAll('a[href]').forEach(link=>{
+            const raw=link.getAttribute('data-origin-href')||link.getAttribute('href');
+            const local=findLocalImage(raw);
+            if(local){link.setAttribute('data-origin-href',raw);link.setAttribute('href',local.url);}
+        });
         const missing = missingRelativeImages();
         paintAssetNotice(missing);
         return missing;
@@ -818,10 +823,16 @@
     }
 
     /* every input goes through here: files from the picker, a folder, or a drop */
-    function ingestFiles(input, meta) {
+    async function ingestFiles(input, meta) {
         const opts = meta || {};
-        const records = Array.from(input || []).map(fileRecord).filter((record) => record && record.file);
+        let records = Array.from(input || []).map(fileRecord).filter((record) => record && record.file);
         if (!records.length) return;
+        const zip=records.find(r=>window.PortableImport.isZip(r.file));
+        if(zip){
+            if(records.length!==1){toast('ZIP은 한 번에 하나만 열어 주세요.','err');return;}
+            try{records=await window.PortableImport.readPackage(zip.file,window.JSZip);state.folderRoot='';}
+            catch(error){toast('ZIP 열기 실패: '+escapeHtml(error.message),'err');return;}
+        }
         if (opts.folderRoot != null) state.folderRoot = normalizePath(opts.folderRoot);
 
         const images = records.filter((record) => isImageFile(record.file));
@@ -831,6 +842,7 @@
 
         if (docs.length) {
             const primary = pickPrimaryDoc(docs);
+            state.folderRoot=window.PortableImport.packageRoot(recordRelative(primary),state.folderRoot);
             const notes = [];
             if (docs.length > 1) notes.push(`폴더의 문서 ${docs.length}개 가운데 ${recordRelative(primary) || primary.file.name} 문서를 열었습니다.`);
             if (images.length) notes.push(`이미지 ${images.length}장을 함께 열었습니다. ZIP 저장 시 assets/에 담깁니다.`);
